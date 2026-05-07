@@ -1,7 +1,7 @@
 import os
 import json
 import tempfile
-from docling.document_converter import DocumentConverter
+# from docling.document_converter import DocumentConverter
 from openai import OpenAI
 from pydantic import ValidationError
 from backend.schemas import CVData
@@ -48,6 +48,8 @@ def structure_cv_data(raw_markdown: str) -> dict:
     api_key = os.getenv("OPENROUTER_API_KEY")
     if not api_key:
         raise ValueError("OPENROUTER_API_KEY is not set")
+    
+    print(f"[LLM] API key present: {api_key[:12]}...{api_key[-4:]}")
         
     client = OpenAI(
         base_url="https://openrouter.ai/api/v1",
@@ -79,7 +81,7 @@ def structure_cv_data(raw_markdown: str) -> dict:
     """
     
     # DEBUG: See what Docling actually finds
-    print(f"--- DEBUG: RAW CV MARKDOWN START ---\n{raw_markdown}\n--- DEBUG: RAW CV MARKDOWN END ---")
+    print(f"--- DEBUG: RAW CV MARKDOWN (first 500 chars) ---\n{raw_markdown[:500]}\n--- END ---")
 
     messages = [
         {"role": "system", "content": system_prompt},
@@ -88,15 +90,24 @@ def structure_cv_data(raw_markdown: str) -> dict:
     
     max_retries = 3
     for attempt in range(max_retries):
+        text_content = None
         try:
-            print(f"Extraction attempt {attempt + 1}/{max_retries}...")
+            print(f"[LLM] Extraction attempt {attempt + 1}/{max_retries}...")
             response = client.chat.completions.create(
                 model="minimax/minimax-m2.7",
                 messages=messages,
                 temperature=0.1
             )
             
+            print(f"[LLM] Response received. Choices: {len(response.choices)}")
+            
+            if not response.choices or not response.choices[0].message.content:
+                print(f"[LLM] ERROR: Empty response from API! Full response: {response}")
+                raise ValueError("LLM returned an empty response. The model may be unavailable.")
+            
             text_content = response.choices[0].message.content.strip()
+            print(f"[LLM] Raw response length: {len(text_content)}")
+            print(f"[LLM] First 200 chars: {text_content[:200]}")
             
             # Clean up potential markdown formatting just in case
             if text_content.startswith("```json"):
@@ -109,23 +120,26 @@ def structure_cv_data(raw_markdown: str) -> dict:
             # VALIDATION STEP: The Mold checks the data
             validated_data = CVData(**parsed_json)
             
-            print("Validation successful!")
+            print("[LLM] Validation successful!")
             # Return as dict for the database
             return validated_data.model_dump()
             
         except (json.JSONDecodeError, ValidationError) as e:
-            print(f"Validation failed on attempt {attempt + 1}: {str(e)}")
+            print(f"[LLM] Validation failed on attempt {attempt + 1}: {str(e)}")
             if attempt == max_retries - 1:
-                # If it's the last attempt, raise the error so the backend doesn't silently fail
                 raise ValueError(f"Failed to extract structured data after {max_retries} attempts. Last error: {str(e)}")
                 
             # THE SELF-HEALING LOOP: Feed the error back to the LLM
-            # The assistant's incorrect output
-            try:
-                # Try to append the bad text content if it exists
+            if text_content:
                 messages.append({"role": "assistant", "content": text_content})
-            except UnboundLocalError:
-                pass 
                 
             error_message = f"Your previous output failed validation. Please correct your output and return only valid JSON.\nError details: {str(e)}"
             messages.append({"role": "user", "content": error_message})
+            
+        except Exception as e:
+            # Catch API errors, timeouts, auth failures, etc.
+            print(f"[LLM] UNEXPECTED ERROR on attempt {attempt + 1}: {type(e).__name__}: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            if attempt == max_retries - 1:
+                raise ValueError(f"LLM API error: {type(e).__name__}: {str(e)}")

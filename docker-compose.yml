@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  qcv-vision:
+    build: .
+    container_name: quatelio-cvision
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend/data:/app/backend/data
+      # Map the .env file if it exists, otherwise use environment section
+      - .env:/app/.env
+    environment:
+      - JWT_SECRET=${JWT_SECRET:-super-secret-key-change-in-prod}
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      - DATABASE_URL=sqlite:////app/backend/data/qcv_app.db
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/frontend/index.html"]
+      interval: 30s
+      timeout: 10s
+      retries: 3

@@ -1,0 +1,9 @@
+google-genai
+Pillow
+python-dotenv
+streamlit
+openai
+docling
+fpdf2
+pydantic
+requests

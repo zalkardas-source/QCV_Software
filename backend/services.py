@@ -1,7 +1,7 @@
 import os
 import json
 import tempfile
-# from docling.document_converter import DocumentConverter
+from docling.document_converter import DocumentConverter
 from openai import OpenAI
 from pydantic import ValidationError
 from backend.schemas import CVData

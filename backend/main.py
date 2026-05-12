@@ -67,7 +67,7 @@ async def root_redirect():
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], # For dev only. Adjust in prod.
+    allow_origins=settings.cors_allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -231,20 +231,7 @@ async def export_pptx(payload: dict, user: User = Depends(get_current_user)):
         raise HTTPException(status_code=500, detail=f"{str(e)}")
 
 @app.get("/api/cvs/{cv_id}/pptx")
-def download_cv_pptx(cv_id: int, token: str = None, db: Session = Depends(get_db)):
-    """Direct PPTX download by CV ID. Uses token query param for auth."""
-    if not token:
-        raise HTTPException(status_code=401, detail="Token required")
-    try:
-        payload = jwt.decode(token, settings.jwt_secret, algorithms=[settings.jwt_algorithm])
-        email = payload.get("sub")
-        if not email:
-            raise HTTPException(status_code=401, detail="Invalid token")
-        user = db.query(User).filter(User.email == email).first()
-        if not user:
-            raise HTTPException(status_code=401, detail="Invalid token")
-    except JWTError:
-        raise HTTPException(status_code=401, detail="Invalid token")
+def download_cv_pptx(cv_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
 
     profile = db.query(CVProfile).filter(CVProfile.id == cv_id).first()
     if not profile:

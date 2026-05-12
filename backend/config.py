@@ -23,6 +23,7 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 60 * 24  # 1 day
     database_url: str = "sqlite:///./backend/data/qcv_app.db"
+    cors_allowed_origins: list[str] = ["http://localhost:8000"]
 
 
 settings = Settings()

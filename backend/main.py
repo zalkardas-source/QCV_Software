@@ -24,17 +24,6 @@ from backend.export_pptx import create_pptx_summary
 # Initialize DB tables
 Base.metadata.create_all(bind=engine)
 
-# Create a default user if database is empty (for demo/initial setup)
-def init_db():
-    db = next(get_db())
-    if db.query(User).count() == 0:
-        default_user = User(
-            email="admin@quatelio.com",
-            hashed_password=get_password_hash("admin123")
-        )
-        db.add(default_user)
-        db.commit()
-init_db()
 
 app = FastAPI(title="QCV Professional Parser API")
 

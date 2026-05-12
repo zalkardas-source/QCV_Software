@@ -24,17 +24,6 @@ from backend.export_pptx import create_pptx_summary
 # Initialize DB tables
 Base.metadata.create_all(bind=engine)
 
-# Create a default user if database is empty (for demo/initial setup)
-def init_db():
-    db = next(get_db())
-    if db.query(User).count() == 0:
-        default_user = User(
-            email="admin@quatelio.com",
-            hashed_password=get_password_hash("admin123")
-        )
-        db.add(default_user)
-        db.commit()
-init_db()
 
 app = FastAPI(title="QCV Professional Parser API")
 
@@ -45,8 +34,7 @@ async def startup_event():
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/login")
 
-SECRET_KEY = os.getenv("JWT_SECRET", "super-secret-key-change-in-prod")
-ALGORITHM = "HS256"
+from backend.config import settings
 
 async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
     credentials_exception = HTTPException(
@@ -55,7 +43,7 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = De
         headers={"WWW-Authenticate": "Bearer"},
     )
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        payload = jwt.decode(token, settings.jwt_secret, algorithms=[settings.jwt_algorithm])
         email: str = payload.get("sub")
         if email is None:
             raise credentials_exception
@@ -79,7 +67,7 @@ async def root_redirect():
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], # For dev only. Adjust in prod.
+    allow_origins=settings.cors_allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -243,20 +231,7 @@ async def export_pptx(payload: dict, user: User = Depends(get_current_user)):
         raise HTTPException(status_code=500, detail=f"{str(e)}")
 
 @app.get("/api/cvs/{cv_id}/pptx")
-def download_cv_pptx(cv_id: int, token: str = None, db: Session = Depends(get_db)):
-    """Direct PPTX download by CV ID. Uses token query param for auth."""
-    if not token:
-        raise HTTPException(status_code=401, detail="Token required")
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        email = payload.get("sub")
-        if not email:
-            raise HTTPException(status_code=401, detail="Invalid token")
-        user = db.query(User).filter(User.email == email).first()
-        if not user:
-            raise HTTPException(status_code=401, detail="Invalid token")
-    except JWTError:
-        raise HTTPException(status_code=401, detail="Invalid token")
+def download_cv_pptx(cv_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
 
     profile = db.query(CVProfile).filter(CVProfile.id == cv_id).first()
     if not profile:

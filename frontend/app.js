@@ -300,8 +300,10 @@ function triggerBlobDownload(blob, filename) {
 
 async function downloadPPTXDirect(cvId) {
     // Fetch the PPTX as a blob, then extract filename from Content-Disposition
-    const url = `${API_BASE}/cvs/${cvId}/pptx?token=${encodeURIComponent(authToken)}`;
-    const response = await fetch(url);
+    const url = `${API_BASE}/cvs/${cvId}/pptx`;
+    const response = await fetch(url, {
+        headers: { "Authorization": `Bearer ${authToken}` }
+    });
     if (!response.ok) {
         const errData = await response.json().catch(() => ({ detail: "Failed to download PPTX" }));
         throw new Error(errData.detail || "Server error during PPTX generation");

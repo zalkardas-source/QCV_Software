@@ -32,6 +32,7 @@ class Skill(Base):
     id = Column(Integer, primary_key=True, index=True)
     cv_profile_id = Column(Integer, ForeignKey("cv_profiles.id"))
     name = Column(String, index=True)
+    category = Column(String, index=True, nullable=True)
     rating = Column(Integer, nullable=True)
     
     cv_profile = relationship("CVProfile", back_populates="skills")
@@ -66,3 +67,10 @@ class BatchJobItem(Base):
     error_message = Column(Text, nullable=True)
     
     batch_job = relationship("BatchJob", back_populates="items")
+
+class ParsingCache(Base):
+    __tablename__ = "parsing_cache"
+    
+    file_hash = Column(String, primary_key=True, index=True)
+    json_data = Column(Text) # Store the extracted JSON
+    created_at = Column(DateTime, default=datetime.utcnow)

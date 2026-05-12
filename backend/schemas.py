@@ -14,7 +14,11 @@ class PersonalInformation(BaseModel):
 
 class Skill(BaseModel):
     skill: str = Field(description="The name of the skill, e.g. Python, Leadership")
-    rating: Optional[str] = Field(default=None, description="Rating of the skill (e.g. 1-5) if provided, otherwise null")
+    rating: int = Field(default=5, description="Numeric rating 1-10. Default to 5 if level is not explicitly mentioned but skill is present.")
+
+class SkillGroup(BaseModel):
+    category: str = Field(description="The category of the skills, e.g. SAP Modules, Programming, Soft Skills, Tools")
+    skills: List[Skill] = Field(description="List of skills within this category")
 
 class Project(BaseModel):
     name: str = Field(description="Name of the project, job title, or role")
@@ -28,5 +32,5 @@ class CVData(BaseModel):
     """
     personal_information: PersonalInformation = Field(description="Core personal details")
     small_summary: Optional[str] = Field(default=None, description="A short professional summary or objective of the candidate")
-    skill_matrix: List[Skill] = Field(default_factory=list, description="List of skills")
+    skill_matrix: List[SkillGroup] = Field(default_factory=list, description="Categorized list of skills")
     projects: List[Project] = Field(default_factory=list, description="List of work experiences or projects")

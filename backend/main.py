@@ -71,6 +71,12 @@ import os
 frontend_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'frontend')
 app.mount("/frontend", StaticFiles(directory=frontend_dir), name="frontend")
 
+from fastapi.responses import RedirectResponse
+
+@app.get("/")
+async def root_redirect():
+    return RedirectResponse(url="/frontend/index.html")
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"], # For dev only. Adjust in prod.
@@ -92,25 +98,63 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = 
     access_token = create_access_token(data={"sub": user.email})
     return {"access_token": access_token, "token_type": "bearer"}
 
+import hashlib
+import anyio
+
+def calculate_file_hash(file_content: bytes) -> str:
+    return hashlib.sha256(file_content).hexdigest()
+
 @app.post("/api/parse-cv")
-def parse_cv(file: UploadFile = File(...), user: User = Depends(get_current_user)):
-    """Uploads a CV, parses it with Docling, and structures it with Minimax."""
+async def parse_cv(
+    file: UploadFile = File(...), 
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Uploads a CV, checks cache, then parses it if needed. Optimized with Async/Threading."""
     try:
-        content = file.file.read()
+        content = await file.read()
+        file_hash = calculate_file_hash(content)
         
-        # 1. Extract markdown
-        raw_markdown = extract_text_from_file(content, file.filename)
+        # 1. Check Cache
+        from backend.models import ParsingCache
+        cached_item = db.query(ParsingCache).filter(ParsingCache.file_hash == file_hash).first()
+        if cached_item:
+            return {
+                "status": "success",
+                "filename": file.filename,
+                "data": json.loads(cached_item.json_data),
+                "cached": True
+            }
         
-        # 2. LLM structure
-        structured_data = structure_cv_data(raw_markdown)
+        # 2. Extract markdown (CPU heavy -> Thread)
+        raw_markdown = await anyio.to_thread.run_sync(
+            extract_text_from_file, content, file.filename
+        )
+        
+        # 3. LLM structure (Network bound -> Thread for consistency/timeout safety)
+        structured_data = await anyio.to_thread.run_sync(
+            structure_cv_data, raw_markdown
+        )
+        
+        # 4. Save to Cache
+        new_cache = ParsingCache(
+            file_hash=file_hash,
+            json_data=json.dumps(structured_data)
+        )
+        db.add(new_cache)
+        db.commit()
         
         return {
             "status": "success",
             "filename": file.filename,
-            "data": structured_data
+            "data": structured_data,
+            "cached": False
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"FATAL ERROR: {error_trace}")
+        raise HTTPException(status_code=500, detail=f"{str(e)}")
 
 @app.post("/api/save-cv")
 def save_cv(payload: dict, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
@@ -137,21 +181,25 @@ def save_cv(payload: dict, db: Session = Depends(get_db), user: User = Depends(g
         db.add(profile)
         db.flush() # Flush to get the profile.id
         
-        # 2. Create Skills
-        skills_data = data.get("skill_matrix", [])
-        for s in skills_data:
-            rating_val = None
-            if s.get("rating"):
-                try:
-                    rating_val = int(s.get("rating"))
-                except ValueError:
-                    pass
-            skill_obj = Skill(
-                cv_profile_id=profile.id,
-                name=s.get("skill", ""),
-                rating=rating_val
-            )
-            db.add(skill_obj)
+        # 2. Create Skills (Nested Category Structure)
+        skill_matrix = data.get("skill_matrix", [])
+        for group in skill_matrix:
+            cat_name = group.get("category", "General")
+            skills_list = group.get("skills", [])
+            for s in skills_list:
+                rating_val = None
+                if s.get("rating"):
+                    try:
+                        rating_val = int(s.get("rating"))
+                    except ValueError:
+                        pass
+                skill_obj = Skill(
+                    cv_profile_id=profile.id,
+                    name=s.get("skill", ""),
+                    category=cat_name,
+                    rating=rating_val
+                )
+                db.add(skill_obj)
             
         # 3. Create Projects
         projects_data = data.get("projects", [])
@@ -173,14 +221,13 @@ def save_cv(payload: dict, db: Session = Depends(get_db), user: User = Depends(g
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/export-pptx")
-def export_pptx(payload: dict, user: User = Depends(get_current_user)):
-    """Generates a PowerPoint presentation from JSON data."""
+async def export_pptx(payload: dict, user: User = Depends(get_current_user)):
+    """Generates a PowerPoint presentation from JSON data (Optimized)."""
     try:
         data = payload.get("data", {})
-        if not data:
-            raise ValueError("No data provided")
+        if not data: raise ValueError("No data provided")
             
-        pptx_bytes = create_pptx_summary(data)
+        pptx_bytes = await anyio.to_thread.run_sync(create_pptx_summary, data)
         
         personal = data.get("personal_information", {})
         name = personal.get("full_name", "CV")
@@ -192,7 +239,8 @@ def export_pptx(payload: dict, user: User = Depends(get_current_user)):
             headers={"Content-Disposition": f'attachment; filename="{filename}"'}
         )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        print(f"PPTX EXPORT ERROR: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"{str(e)}")
 
 @app.get("/api/cvs/{cv_id}/pptx")
 def download_cv_pptx(cv_id: int, token: str = None, db: Session = Depends(get_db)):

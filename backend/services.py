@@ -3,14 +3,6 @@ import sys
 import json
 import tempfile
 
-# Windows Encoding Fix: Force UTF-8 stdout to prevent charmap crashes
-if sys.stdout and hasattr(sys.stdout, 'reconfigure'):
-    try:
-        sys.stdout.reconfigure(encoding='utf-8', errors='replace')
-        sys.stderr.reconfigure(encoding='utf-8', errors='replace')
-    except Exception:
-        pass
-
 # Windows DLL Fix for PyTorch/Docling
 if os.name == 'nt':
     try:
@@ -18,11 +10,14 @@ if os.name == 'nt':
         for path in site.getsitepackages():
             torch_lib_path = os.path.join(path, 'torch', 'lib')
             if os.path.exists(torch_lib_path):
-                os.add_dll_directory(torch_lib_path)
+                # Only add if it's a valid directory to avoid Errno 22
+                os.add_dll_directory(os.path.abspath(torch_lib_path))
     except Exception:
         pass
 
-from docling.document_converter import DocumentConverter
+from docling.document_converter import DocumentConverter, PdfFormatOption
+from docling.datamodel.base_models import InputFormat
+from docling.datamodel.pipeline_options import PdfPipelineOptions, TableStructureOptions
 from openai import OpenAI
 from pydantic import ValidationError
 from backend.schemas import CVData
@@ -33,72 +28,68 @@ _converter = None
 def get_docling_converter():
     global _converter
     if _converter is None:
-        _converter = DocumentConverter()
+        # Optimization: Disable heavy features not needed for CV text extraction
+        pipeline_options = PdfPipelineOptions()
+        pipeline_options.do_ocr = True 
+        pipeline_options.do_table_structure = True
+        pipeline_options.images_scale = 0.0 
+        
+        _converter = DocumentConverter(
+            format_options={
+                InputFormat.PDF: PdfFormatOption(pipeline_options=pipeline_options)
+            }
+        )
     return _converter
 
 def warmup_docling():
     """Initializes the Docling model to avoid delays during the first request."""
-    print("Warming up Docling...")
-    get_docling_converter()
-    print("Docling ready.")
+    print("Warming up Docling Engine...")
+    try:
+        get_docling_converter()
+        print("Docling Engine optimized and ready.")
+    except Exception as e:
+        print(f"Warmup ERROR: {e}")
 
 def extract_text_from_file(file_content: bytes, filename: str) -> str:
     """Extracts markdown from a document using Docling."""
-    ext = filename.split('.')[-1]
-    with tempfile.NamedTemporaryFile(delete=False, suffix=f".{ext}") as tmp_file:
-        tmp_file.write(file_content)
-        tmp_path = tmp_file.name
-        
+    ext = filename.split('.')[-1].lower() if "." in filename else "pdf"
+    import uuid
+    tmp_path = os.path.abspath(f"tmp_{uuid.uuid4().hex}.{ext}")
+    
     try:
-        print(f"Starting Docling conversion for {filename}...")
+        with open(tmp_path, 'wb') as f:
+            f.write(file_content)
+        
         converter = get_docling_converter()
+        # Convert with optimized pipeline
         result = converter.convert(tmp_path)
-        print("Conversion successful, exporting to markdown...")
-        md = result.document.export_to_markdown()
-        print(f"Markdown export successful, length: {len(md)}")
-        return md
+        return result.document.export_to_markdown()
     except Exception as e:
-        print(f"Docling ERROR: {str(e)}")
+        print(f"Docling ERROR: {type(e).__name__}: {str(e)}")
         raise e
     finally:
         if os.path.exists(tmp_path):
-            os.remove(tmp_path)
+            try: os.remove(tmp_path)
+            except: pass
 
 def structure_cv_data(raw_markdown: str) -> dict:
-    """Structures CV Markdown into strict JSON using Minimax-m2.7 and a Pydantic Validation loop."""
+    """Structures CV Markdown into strict JSON using Minimax-m2.7 with optimized prompt."""
     api_key = os.getenv("OPENROUTER_API_KEY")
-    if not api_key:
-        raise ValueError("OPENROUTER_API_KEY is not set")
-    
-    print(f"[LLM] API key present: {api_key[:12]}...{api_key[-4:]}")
+    if not api_key: raise ValueError("OPENROUTER_API_KEY is not set")
         
-    client = OpenAI(
-        base_url="https://openrouter.ai/api/v1",
-        api_key=api_key,
-    )
-    
-    # We pass the JSON Schema of our Pydantic model to the LLM
+    client = OpenAI(base_url="https://openrouter.ai/api/v1", api_key=api_key)
     schema_json = CVData.model_json_schema()
     
+    # Optimized prompt: Shorter, more direct, better for lower latency
     system_prompt = f"""
-    You are an expert CV data extractor. Your ONLY job is to extract data from the provided CV markdown and output it as a valid JSON object.
-    You MUST adhere EXACTLY to the following JSON schema:
-    {json.dumps(schema_json, indent=2)}
+    Return ONLY a valid JSON object matching this schema:
+    {json.dumps(schema_json)}
     
-    CRITICAL INSTRUCTIONS:
-    - Output ONLY valid JSON, no markdown blocks.
-    - Personal Details: Full name, DOB, Nationality, Email, Phone, Location (City, Country).
-    - Skill Matrix: 
-        * SCAN THE ENTIRE DOCUMENT for 'Skills', 'Competences', 'Expertise', 'IT Knowledge'.
-        * ESPECIALLY LOOK FOR TABLES or lists under headers like 'SAP COMPETENCES'.
-        * RATINGS: If you see visual ratings (dots ●●●, circles ○○○, stars ***, X's [X][X][ ], or numbers 8/10), convert them to a 1-5 numeric rating.
-        * Example: 'SAP PP ●●●●●●●●●●' (10 dots) = 5. 'SAP QM ●●●●●●○○○○' (6 dots) = 3.
-        * If a skill name has symbols next to it, those are almost certainly ratings.
-        * IMPORTANT: Extract EVERY skill found. Do not summarize.
-    - Projects/Work Experience: 
-        * Extract EVERY job and project found. 
-        * Map 'Work Experience' or 'Employment History' to the projects array.
-        * Maintain the original language for descriptions.
+    RULES:
+    1. Skills: Extract ALL skills. Categorize logically (e.g. 'SAP', 'Dev', 'Soft Skills').
+    2. Ratings: Scale 1-10. (Expert=10, Senior=8-9, Mid=6-7, Junior=4-5, Basic=1-3).
+    3. Experience: Extract every job/project. Maintain original language for descriptions.
+    4. Format: No preamble, no markdown blocks, just raw JSON.
     """
     
     # DEBUG: See what Docling actually finds

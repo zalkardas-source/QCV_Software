@@ -207,14 +207,34 @@ function updatePreview(data) {
 
     const skillsContainer = document.getElementById('previewSkills');
     skillsContainer.innerHTML = '';
-    (data.skill_matrix || []).forEach(s => {
-        const name = s.skill || "";
-        if (name) {
-            const span = document.createElement('span');
-            span.className = 'bg-slate-100 text-slate-600 px-2 py-1 rounded text-xs font-medium border border-slate-200';
-            span.textContent = name;
-            skillsContainer.appendChild(span);
-        }
+    (data.skill_matrix || []).forEach(group => {
+        const catName = group.category || "General";
+        
+        // Add Category Header
+        const catHeader = document.createElement('h4');
+        catHeader.className = 'text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-4 mb-2';
+        catHeader.textContent = catName;
+        skillsContainer.appendChild(catHeader);
+
+        (group.skills || []).forEach(s => {
+            const name = s.skill || "";
+            const rating = s.rating;
+            if (name) {
+                const r = Math.min(10, Math.max(0, parseInt(rating) || 5));
+                const pct = (r / 10) * 100;
+                const barColor = r >= 8 ? '#22c55e' : r >= 5 ? '#f59e0b' : '#ef4444';
+                const div = document.createElement('div');
+                div.className = 'flex items-center gap-2 w-full py-1';
+                div.innerHTML = `
+                    <span class="text-xs text-slate-700 font-medium w-32 shrink-0 truncate" title="${name}">${name}</span>
+                    <div class="flex-1 bg-slate-200 rounded-full h-1.5 overflow-hidden">
+                        <div style="width:${pct}%; background:${barColor};" class="h-full rounded-full transition-all duration-300"></div>
+                    </div>
+                    <span class="text-xs font-bold w-6 text-right shrink-0" style="color:${barColor}">${r}</span>
+                `;
+                skillsContainer.appendChild(div);
+            }
+        });
     });
 
     const projectsContainer = document.getElementById('previewProjects');
@@ -259,24 +279,33 @@ btnSaveDB.addEventListener('click', async () => {
 
 // ── Generate PPTX ───────────────────────────────────────────────
 function triggerBlobDownload(blob, filename) {
+    // Ensure filename ends with .pptx
+    if (!filename.toLowerCase().endsWith('.pptx')) filename += '.pptx';
+    
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.style.display = 'none';
     a.href = url;
+    a.setAttribute('download', filename); // Use setAttribute for better compatibility
     a.download = filename;
     document.body.appendChild(a);
     a.click();
+    
+    // Slight delay before cleanup
     setTimeout(() => {
         window.URL.revokeObjectURL(url);
         document.body.removeChild(a);
-    }, 500);
+    }, 1000);
 }
 
 async function downloadPPTXDirect(cvId) {
     // Fetch the PPTX as a blob, then extract filename from Content-Disposition
     const url = `${API_BASE}/cvs/${cvId}/pptx?token=${encodeURIComponent(authToken)}`;
     const response = await fetch(url);
-    if (!response.ok) throw new Error("Failed to download PPTX");
+    if (!response.ok) {
+        const errData = await response.json().catch(() => ({ detail: "Failed to download PPTX" }));
+        throw new Error(errData.detail || "Server error during PPTX generation");
+    }
 
     // Try to get filename from Content-Disposition header
     let filename = "CV_Summary.pptx";
@@ -303,7 +332,10 @@ async function generatePPTXFromData(data) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ data })
     });
-    if (!response.ok) throw new Error("Failed to generate PPTX from server");
+    if (!response.ok) {
+        const errData = await response.json().catch(() => ({ detail: "Failed to generate PPTX" }));
+        throw new Error(errData.detail || "Server error during PPTX generation");
+    }
 
     const name = data.personal_information?.full_name || "CV";
     const filename = `${name.replace(/\s+/g, '_')}_Summary.pptx`;

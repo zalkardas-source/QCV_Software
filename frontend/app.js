@@ -258,10 +258,39 @@ btnSaveDB.addEventListener('click', async () => {
 });
 
 // ── Generate PPTX ───────────────────────────────────────────────
-function downloadPPTXDirect(cvId) {
-    // Direct browser download via GET URL – guaranteed correct filename
+function triggerBlobDownload(blob, filename) {
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.style.display = 'none';
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => {
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+    }, 500);
+}
+
+async function downloadPPTXDirect(cvId) {
+    // Fetch the PPTX as a blob, then extract filename from Content-Disposition
     const url = `${API_BASE}/cvs/${cvId}/pptx?token=${encodeURIComponent(authToken)}`;
-    window.open(url, '_blank');
+    const response = await fetch(url);
+    if (!response.ok) throw new Error("Failed to download PPTX");
+
+    // Try to get filename from Content-Disposition header
+    let filename = "CV_Summary.pptx";
+    const disposition = response.headers.get("Content-Disposition");
+    if (disposition) {
+        const match = disposition.match(/filename[^;=\n]*="?([^";\n]+)"?/i);
+        if (match && match[1]) filename = match[1];
+    }
+
+    const arrayBuffer = await response.arrayBuffer();
+    const blob = new Blob([arrayBuffer], {
+        type: 'application/vnd.openxmlformats-officedocument.presentationml.presentation'
+    });
+    triggerBlobDownload(blob, filename);
 }
 
 async function generatePPTXFromData(data) {
@@ -283,17 +312,7 @@ async function generatePPTXFromData(data) {
     const blob = new Blob([arrayBuffer], {
         type: 'application/vnd.openxmlformats-officedocument.presentationml.presentation'
     });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.style.display = 'none';
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    setTimeout(() => {
-        window.URL.revokeObjectURL(url);
-        document.body.removeChild(a);
-    }, 1000);
+    triggerBlobDownload(blob, filename);
 }
 
 btnGeneratePPTX.addEventListener('click', async () => {
@@ -387,8 +406,10 @@ async function viewCV(id) {
     } catch (err) { alert(err.message); }
 }
 
-function downloadCVPPTX(id) {
-    downloadPPTXDirect(id);
+async function downloadCVPPTX(id) {
+    try {
+        await downloadPPTXDirect(id);
+    } catch (err) { alert("Error downloading PPTX: " + err.message); }
 }
 
 async function deleteCV(id) {

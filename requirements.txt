@@ -6,4 +6,5 @@ openai
 docling
 fpdf2
 pydantic
+pydantic-settings
 requests

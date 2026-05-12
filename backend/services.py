@@ -1,6 +1,27 @@
 import os
+import sys
 import json
 import tempfile
+
+# Windows Encoding Fix: Force UTF-8 stdout to prevent charmap crashes
+if sys.stdout and hasattr(sys.stdout, 'reconfigure'):
+    try:
+        sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+        sys.stderr.reconfigure(encoding='utf-8', errors='replace')
+    except Exception:
+        pass
+
+# Windows DLL Fix for PyTorch/Docling
+if os.name == 'nt':
+    try:
+        import site
+        for path in site.getsitepackages():
+            torch_lib_path = os.path.join(path, 'torch', 'lib')
+            if os.path.exists(torch_lib_path):
+                os.add_dll_directory(torch_lib_path)
+    except Exception:
+        pass
+
 from docling.document_converter import DocumentConverter
 from openai import OpenAI
 from pydantic import ValidationError

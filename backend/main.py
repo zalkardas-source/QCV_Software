@@ -17,7 +17,7 @@ import os
 load_dotenv()
 
 from backend.database import engine, Base, get_db, SessionLocal
-from backend.models import User, CVProfile, Skill, Project, BatchJob, BatchJobItem
+from backend.models import User, CVProfile, Skill, Project
 from backend.services import extract_text_from_file, structure_cv_data, warmup_docling
 from backend.export_pptx import create_pptx_summary
 

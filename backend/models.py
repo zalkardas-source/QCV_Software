@@ -48,26 +48,6 @@ class Project(Base):
     
     cv_profile = relationship("CVProfile", back_populates="projects")
 
-class BatchJob(Base):
-    __tablename__ = "batch_jobs"
-    
-    id = Column(Integer, primary_key=True, index=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    status = Column(String, default="pending") # pending, processing, completed, error
-    
-    items = relationship("BatchJobItem", back_populates="batch_job", cascade="all, delete-orphan")
-
-class BatchJobItem(Base):
-    __tablename__ = "batch_job_items"
-    
-    id = Column(Integer, primary_key=True, index=True)
-    batch_job_id = Column(Integer, ForeignKey("batch_jobs.id"))
-    filename = Column(String)
-    status = Column(String, default="pending") # pending, processing, done, error
-    error_message = Column(Text, nullable=True)
-    
-    batch_job = relationship("BatchJob", back_populates="items")
-
 class ParsingCache(Base):
     __tablename__ = "parsing_cache"
     

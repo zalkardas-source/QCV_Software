@@ -17,3 +17,9 @@ venv/
 # IDEs
 .vscode/
 .idea/
+
+# Conda environments
+.conda/
+
+# Local scratch/experiments (not part of the app)
+scratch/

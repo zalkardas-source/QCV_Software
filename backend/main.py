@@ -5,8 +5,15 @@ from fastapi.responses import Response
 from sqlalchemy.orm import Session
 from typing import List
 import json
+import logging
 import os
 from dotenv import load_dotenv
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+)
+logger = logging.getLogger(__name__)
 
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from backend.auth import verify_password, create_access_token, get_password_hash
@@ -139,9 +146,7 @@ async def parse_cv(
             "cached": False
         }
     except Exception as e:
-        import traceback
-        error_trace = traceback.format_exc()
-        print(f"FATAL ERROR: {error_trace}")
+        logger.error("Fatal error in parse_cv", exc_info=True)
         raise HTTPException(status_code=500, detail=f"{str(e)}")
 
 @app.post("/api/save-cv")
@@ -227,7 +232,7 @@ async def export_pptx(payload: dict, user: User = Depends(get_current_user)):
             headers={"Content-Disposition": f'attachment; filename="{filename}"'}
         )
     except Exception as e:
-        print(f"PPTX EXPORT ERROR: {str(e)}")
+        logger.error("PPTX export error: %s", e)
         raise HTTPException(status_code=500, detail=f"{str(e)}")
 
 @app.get("/api/cvs/{cv_id}/pptx")

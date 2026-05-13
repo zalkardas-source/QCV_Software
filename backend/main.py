@@ -397,18 +397,58 @@ def _job_to_dict(j: JobRequirement) -> dict:
 
 # ── CV Matching ───────────────────────────────────────────────────────────────
 
+# Normalizes common German↔English skill name variations so matching works
+# regardless of the CV's language.
+_SKILL_ALIASES: dict[str, str] = {
+    # Languages
+    "englisch": "english", "deutsch": "german", "französisch": "french",
+    "spanisch": "spanish", "italienisch": "italian", "russisch": "russian",
+    "chinesisch": "chinese", "japanisch": "japanese", "arabisch": "arabic",
+    "portugiesisch": "portuguese", "niederländisch": "dutch", "türkisch": "turkish",
+    "polnisch": "polish", "schwedisch": "swedish", "dänisch": "danish",
+    "norwegisch": "norwegian", "finnisch": "finnish", "koreanisch": "korean",
+    # MS Office variants
+    "microsoft excel": "excel", "ms excel": "excel",
+    "microsoft word": "word", "ms word": "word",
+    "microsoft powerpoint": "powerpoint", "ms powerpoint": "powerpoint",
+    "microsoft office": "ms office", "microsoft 365": "ms office",
+    # Common synonyms
+    "javascript": "js", "js": "javascript",
+    "typescript": "ts", "ts": "typescript",
+    "node.js": "nodejs", "nodejs": "node.js",
+    "react.js": "react", "vue.js": "vue", "angular.js": "angular",
+    "postgresql": "postgres", "postgres": "postgresql",
+}
+
+def _normalize(name: str) -> str:
+    n = name.lower().strip()
+    return _SKILL_ALIASES.get(n, n)
+
+
 def _match_score(candidate_skills: list, required: list, nice: list) -> dict:
     """Scores a candidate's skills against job requirements. No LLM needed."""
-    skill_map = {}
+    # Build normalized skill map: both the original and normalized name point to the same rating
+    skill_map: dict[str, int] = {}
     for s in candidate_skills:
-        name = s.get("skill", "").lower().strip()
-        if name:
-            skill_map[name] = s.get("rating", 4)
+        raw_name = s.get("skill", "").lower().strip()
+        if not raw_name:
+            continue
+        rating = s.get("rating", 4)
+        skill_map[raw_name] = rating
+        norm = _normalize(raw_name)
+        if norm != raw_name:
+            skill_map[norm] = rating
+        # Also add the reverse alias so "english" maps when CV says "englisch"
+        for alias_from, alias_to in _SKILL_ALIASES.items():
+            if raw_name == alias_to and alias_from not in skill_map:
+                skill_map[alias_from] = rating
 
     def find(job_skill: str) -> int | None:
-        needle = job_skill.lower().strip()
+        needle = _normalize(job_skill.lower().strip())
+        # 1. Exact match (after normalization)
         if needle in skill_map:
             return skill_map[needle]
+        # 2. Substring match
         for k, v in skill_map.items():
             if needle in k or k in needle:
                 return v

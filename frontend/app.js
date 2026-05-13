@@ -615,9 +615,10 @@ function renderJobsTable(jobs) {
             </td>
             <td class="px-5 py-3 text-slate-500">${date}</td>
             <td class="px-5 py-3 text-right">
-                <button onclick="deleteJob(${j.id})" class="p-1.5 rounded hover:bg-red-50 text-slate-500 hover:text-red-500 opacity-60 group-hover:opacity-100 transition-all">
-                    <i class="fa-solid fa-trash-can text-sm"></i>
-                </button>
+                <div class="flex items-center justify-end gap-1 opacity-60 group-hover:opacity-100 transition-opacity">
+                    <button onclick="viewJob(${j.id})" class="p-1.5 rounded hover:bg-brand-light text-slate-500 hover:text-brand-blue transition-colors"><i class="fa-solid fa-eye text-sm"></i></button>
+                    <button onclick="deleteJob(${j.id})" class="p-1.5 rounded hover:bg-red-50 text-slate-500 hover:text-red-500 transition-colors"><i class="fa-solid fa-trash-can text-sm"></i></button>
+                </div>
             </td>
         </tr>`;
     }).join('');
@@ -639,6 +640,95 @@ async function deleteJob(id) {
         await apiFetch(`/jobs/${id}`, { method: 'DELETE' });
         loadJobs();
     } catch (err) { alert(err.message); }
+}
+
+// ── Job Detail Modal & Matching ─────────────────────────────────────────────
+
+let currentJobId = null;
+
+function closeJobModal() {
+    document.getElementById('jobModal').classList.add('hidden');
+    currentJobId = null;
+}
+
+async function viewJob(id) {
+    try {
+        const response = await apiFetch(`/jobs/${id}`);
+        const job = await response.json();
+        currentJobId = job.id;
+
+        document.getElementById('modalJobTitle').textContent = job.title || '—';
+        document.getElementById('modalJobDesc').textContent = job.description || '';
+        document.getElementById('modalJobExp').textContent = job.experience_years ? `${job.experience_years}+ yrs exp` : '';
+        document.getElementById('modalJobLoc').textContent = job.location ? `📍 ${job.location}` : '';
+        document.getElementById('modalJobRemote').textContent =
+            job.remote === 'true' ? 'Remote: Yes' :
+            job.remote === 'false' ? 'Remote: No' : '';
+
+        document.getElementById('modalJobRequired').innerHTML = (job.required_skills || []).map(s =>
+            `<span class="bg-brand-light text-brand-blue text-xs font-medium px-2 py-0.5 rounded-full">${s}</span>`
+        ).join('');
+        document.getElementById('modalJobNice').innerHTML = (job.nice_to_have_skills || []).map(s =>
+            `<span class="bg-slate-100 text-slate-600 text-xs font-medium px-2 py-0.5 rounded-full">${s}</span>`
+        ).join('');
+
+        document.getElementById('matchResults').innerHTML = '';
+        document.getElementById('jobModal').classList.remove('hidden');
+    } catch (err) {
+        alert('Error loading job: ' + err.message);
+    }
+}
+
+async function matchCandidates() {
+    if (!currentJobId) return;
+    const btn = document.getElementById('btnMatchCandidates');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-spinner spinner mr-1"></i> Matching...';
+
+    try {
+        const response = await apiFetch(`/jobs/${currentJobId}/matches`);
+        const results = await response.json();
+        const container = document.getElementById('matchResults');
+
+        if (!results.length) {
+            container.innerHTML = '<p class="text-sm text-slate-400 text-center py-4">No candidates in database yet.</p>';
+            return;
+        }
+
+        container.innerHTML = results.map(c => {
+            const scoreClass = c.score >= 70 ? 'bg-green-50 text-green-700 border-green-200' :
+                               c.score >= 40 ? 'bg-amber-50 text-amber-700 border-amber-200' :
+                                              'bg-red-50 text-red-500 border-red-200';
+            const matched = c.matched_required.map(s =>
+                `<span class="bg-green-50 text-green-700 text-xs px-1.5 py-0.5 rounded border border-green-200">${s}</span>`
+            ).join('');
+            const missing = c.missing_required.map(s =>
+                `<span class="bg-red-50 text-red-500 text-xs px-1.5 py-0.5 rounded border border-red-200 line-through">${s}</span>`
+            ).join('');
+            const nice = c.matched_nice.map(s =>
+                `<span class="bg-blue-50 text-blue-600 text-xs px-1.5 py-0.5 rounded border border-blue-100">${s}</span>`
+            ).join('');
+
+            return `
+            <div class="border border-slate-200 rounded-xl p-4 mb-3 flex items-start gap-4 hover:bg-slate-50/60 transition-colors">
+                <div class="flex-shrink-0 w-14 h-14 rounded-lg border-2 flex flex-col items-center justify-center font-bold text-xl leading-none ${scoreClass}">
+                    ${c.score}<span class="text-[10px] font-normal leading-tight">%</span>
+                </div>
+                <div class="flex-1 min-w-0">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="font-semibold text-slate-800">${c.name || 'Unknown'}</span>
+                        <span class="text-xs text-slate-400">${c.email || ''}</span>
+                    </div>
+                    <div class="flex flex-wrap gap-1.5">${matched}${missing}${nice}</div>
+                </div>
+            </div>`;
+        }).join('');
+    } catch (err) {
+        document.getElementById('matchResults').innerHTML = `<p class="text-sm text-red-400 py-2">Error: ${err.message}</p>`;
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-ranking-star"></i> Match Candidates';
+    }
 }
 
 let activeFilter = 'all';

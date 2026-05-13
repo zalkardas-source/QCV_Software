@@ -365,6 +365,50 @@
         </div>
     </main>
 
-    <script src="app.js?v=9"></script>
+    <!-- Job Detail Modal -->
+    <div id="jobModal" class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onclick="if(event.target===this)closeJobModal()">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col">
+            <div class="flex justify-between items-start p-6 border-b border-slate-200">
+                <div>
+                    <h2 id="modalJobTitle" class="text-xl font-bold text-slate-900"></h2>
+                    <div class="flex items-center gap-4 mt-1 text-sm text-slate-500">
+                        <span id="modalJobExp"></span>
+                        <span id="modalJobLoc"></span>
+                        <span id="modalJobRemote"></span>
+                    </div>
+                </div>
+                <button onclick="closeJobModal()" class="text-slate-400 hover:text-slate-600 transition-colors ml-4 flex-shrink-0">
+                    <i class="fa-solid fa-xmark text-xl"></i>
+                </button>
+            </div>
+            <div class="overflow-y-auto flex-1 p-6">
+                <p id="modalJobDesc" class="text-sm text-slate-600 italic mb-5"></p>
+                <div class="grid grid-cols-2 gap-4 mb-6">
+                    <div>
+                        <span class="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-2">Required Skills</span>
+                        <div id="modalJobRequired" class="flex flex-wrap gap-1.5"></div>
+                    </div>
+                    <div>
+                        <span class="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-2">Nice to Have</span>
+                        <div id="modalJobNice" class="flex flex-wrap gap-1.5"></div>
+                    </div>
+                </div>
+
+                <!-- Match Section -->
+                <div class="border-t border-slate-200 pt-5">
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="font-semibold text-slate-800">Candidate Matches</h3>
+                        <button onclick="matchCandidates()" id="btnMatchCandidates"
+                            class="bg-brand-blue hover:bg-brand-dark text-white px-4 py-1.5 rounded-lg text-sm font-medium transition-colors flex items-center gap-2">
+                            <i class="fa-solid fa-ranking-star"></i> Match Candidates
+                        </button>
+                    </div>
+                    <div id="matchResults"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js?v=10"></script>
 </body>
 </html>

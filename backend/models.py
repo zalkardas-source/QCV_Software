@@ -19,7 +19,8 @@ class CVProfile(Base):
     email = Column(String)
     location = Column(String) # New field
     small_summary = Column(Text) # New field
-    raw_json = Column(Text) # Store the structured data as a JSON string
+    raw_json = Column(Text)
+    status = Column(String, default="new")
     created_at = Column(DateTime, default=datetime.utcnow)
 
     # Relationships

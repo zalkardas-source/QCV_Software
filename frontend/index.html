@@ -231,23 +231,32 @@
                         </div>
                     </div>
                     <div class="glass-panel rounded-xl p-4 flex items-center gap-4">
-                        <div class="w-12 h-12 bg-green-50 rounded-lg flex items-center justify-center text-green-600">
-                            <i class="fa-solid fa-file-powerpoint text-xl"></i>
+                        <div class="w-12 h-12 bg-slate-100 rounded-lg flex items-center justify-center text-slate-500">
+                            <i class="fa-solid fa-circle-dot text-xl"></i>
                         </div>
                         <div>
-                            <div id="statPptx" class="text-2xl font-bold text-slate-900">∞</div>
-                            <div class="text-xs text-slate-500">PPTX Available</div>
+                            <div id="statNew" class="text-2xl font-bold text-slate-900">0</div>
+                            <div class="text-xs text-slate-500">New</div>
                         </div>
                     </div>
                     <div class="glass-panel rounded-xl p-4 flex items-center gap-4">
-                        <div class="w-12 h-12 bg-purple-50 rounded-lg flex items-center justify-center text-purple-600">
-                            <i class="fa-solid fa-database text-xl"></i>
+                        <div class="w-12 h-12 bg-green-50 rounded-lg flex items-center justify-center text-green-600">
+                            <i class="fa-solid fa-envelope-open-text text-xl"></i>
                         </div>
                         <div>
-                            <div class="text-2xl font-bold text-slate-900">SQLite</div>
-                            <div class="text-xs text-slate-500">Storage Engine</div>
+                            <div id="statInvited" class="text-2xl font-bold text-slate-900">0</div>
+                            <div class="text-xs text-slate-500">Invited</div>
                         </div>
                     </div>
+                </div>
+
+                <!-- Filter Tabs -->
+                <div class="flex gap-2 mb-4" id="statusFilterTabs">
+                    <button onclick="filterByStatus('all')" data-filter="all" class="status-filter-btn px-3 py-1.5 rounded-lg text-xs font-semibold border border-brand-blue bg-brand-blue text-white transition-colors">All</button>
+                    <button onclick="filterByStatus('new')" data-filter="new" class="status-filter-btn px-3 py-1.5 rounded-lg text-xs font-semibold border border-slate-300 text-slate-600 hover:border-brand-blue hover:text-brand-blue transition-colors">New</button>
+                    <button onclick="filterByStatus('in_review')" data-filter="in_review" class="status-filter-btn px-3 py-1.5 rounded-lg text-xs font-semibold border border-slate-300 text-slate-600 hover:border-blue-500 hover:text-blue-500 transition-colors">In Review</button>
+                    <button onclick="filterByStatus('invited')" data-filter="invited" class="status-filter-btn px-3 py-1.5 rounded-lg text-xs font-semibold border border-slate-300 text-slate-600 hover:border-green-500 hover:text-green-500 transition-colors">Invited</button>
+                    <button onclick="filterByStatus('rejected')" data-filter="rejected" class="status-filter-btn px-3 py-1.5 rounded-lg text-xs font-semibold border border-slate-300 text-slate-600 hover:border-red-500 hover:text-red-500 transition-colors">Rejected</button>
                 </div>
 
                 <!-- Table -->
@@ -260,6 +269,7 @@
                                 <th class="text-left px-5 py-3 font-semibold text-slate-600">Email</th>
                                 <th class="text-left px-5 py-3 font-semibold text-slate-600">Source File</th>
                                 <th class="text-left px-5 py-3 font-semibold text-slate-600">Skills</th>
+                                <th class="text-left px-5 py-3 font-semibold text-slate-600">Status</th>
                                 <th class="text-left px-5 py-3 font-semibold text-slate-600">Date</th>
                                 <th class="text-right px-5 py-3 font-semibold text-slate-600">Actions</th>
                             </tr>

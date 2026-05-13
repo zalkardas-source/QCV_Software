@@ -374,6 +374,8 @@ async function loadDashboard() {
         const response = await apiFetch(`/cvs`);
         allCVs = await response.json();
         document.getElementById('statTotal').textContent = allCVs.length;
+        document.getElementById('statNew').textContent = allCVs.filter(c => (c.status || 'new') === 'new').length;
+        document.getElementById('statInvited').textContent = allCVs.filter(c => c.status === 'invited').length;
         renderDashboardTable(allCVs);
     } catch (err) {
         tbody.innerHTML = `<tr><td colspan="6" class="text-center py-10 text-red-400">Failed to load data. ${err.message}</td></tr>`;
@@ -416,6 +418,7 @@ function renderDashboardTable(cvs) {
                     ${skillCount} Skills
                 </span>
             </td>
+            <td class="px-5 py-3">${renderStatusSelect(cv.id, cv.status || 'new')}</td>
             <td class="px-5 py-3 text-slate-500">${date}</td>
             <td class="px-5 py-3 text-right">
                 <div class="flex items-center justify-end gap-1 opacity-60 group-hover:opacity-100 transition-opacity">
@@ -452,6 +455,59 @@ async function deleteCV(id) {
         await apiFetch(`/cvs/${id}`, { method: 'DELETE' });
         loadDashboard();
     } catch (err) { alert(err.message); }
+}
+
+const STATUS_CONFIG = {
+    new:       { label: 'New',       classes: 'bg-slate-100 text-slate-600 border-slate-300' },
+    in_review: { label: 'In Review', classes: 'bg-blue-50 text-blue-600 border-blue-200' },
+    invited:   { label: 'Invited',   classes: 'bg-green-50 text-green-600 border-green-200' },
+    rejected:  { label: 'Rejected',  classes: 'bg-red-50 text-red-500 border-red-200' },
+};
+
+function renderStatusSelect(id, status) {
+    const cfg = STATUS_CONFIG[status] || STATUS_CONFIG.new;
+    const options = Object.entries(STATUS_CONFIG)
+        .map(([val, c]) => `<option value="${val}" ${val === status ? 'selected' : ''}>${c.label}</option>`)
+        .join('');
+    return `<select onchange="updateStatus(${id}, this.value)"
+        class="text-xs font-semibold border rounded-full px-2 py-1 cursor-pointer outline-none ${cfg.classes}">
+        ${options}
+    </select>`;
+}
+
+async function updateStatus(id, newStatus) {
+    try {
+        await apiFetch(`/cvs/${id}/status`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status: newStatus }),
+        });
+        const cv = allCVs.find(c => c.id === id);
+        if (cv) cv.status = newStatus;
+        document.getElementById('statNew').textContent = allCVs.filter(c => (c.status || 'new') === 'new').length;
+        document.getElementById('statInvited').textContent = allCVs.filter(c => c.status === 'invited').length;
+    } catch (err) { alert('Failed to update status: ' + err.message); }
+}
+
+let activeFilter = 'all';
+
+function filterByStatus(filter) {
+    activeFilter = filter;
+    document.querySelectorAll('.status-filter-btn').forEach(btn => {
+        const isActive = btn.dataset.filter === filter;
+        btn.className = btn.className
+            .replace(/bg-\S+ text-white border-\S+/g, '')
+            .trim();
+        if (isActive) {
+            btn.classList.add('bg-brand-blue', 'text-white', 'border-brand-blue');
+            btn.classList.remove('text-slate-600', 'border-slate-300');
+        } else {
+            btn.classList.remove('bg-brand-blue', 'text-white', 'border-brand-blue');
+            btn.classList.add('text-slate-600', 'border-slate-300');
+        }
+    });
+    const filtered = filter === 'all' ? allCVs : allCVs.filter(c => (c.status || 'new') === filter);
+    renderDashboardTable(filtered);
 }
 
 document.getElementById('dashboardSearch').addEventListener('input', (e) => {

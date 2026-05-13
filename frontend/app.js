@@ -615,9 +615,10 @@ function renderJobsTable(jobs) {
             </td>
             <td class="px-5 py-3 text-slate-500">${date}</td>
             <td class="px-5 py-3 text-right">
-                <button onclick="deleteJob(${j.id})" class="p-1.5 rounded hover:bg-red-50 text-slate-500 hover:text-red-500 opacity-60 group-hover:opacity-100 transition-all">
-                    <i class="fa-solid fa-trash-can text-sm"></i>
-                </button>
+                <div class="flex items-center justify-end gap-1 opacity-60 group-hover:opacity-100 transition-opacity">
+                    <button onclick="viewJob(${j.id})" class="p-1.5 rounded hover:bg-brand-light text-slate-500 hover:text-brand-blue transition-colors"><i class="fa-solid fa-eye text-sm"></i></button>
+                    <button onclick="deleteJob(${j.id})" class="p-1.5 rounded hover:bg-red-50 text-slate-500 hover:text-red-500 transition-colors"><i class="fa-solid fa-trash-can text-sm"></i></button>
+                </div>
             </td>
         </tr>`;
     }).join('');
@@ -631,6 +632,30 @@ async function updateJobStatus(id, newStatus) {
             body: JSON.stringify({ status: newStatus }),
         });
     } catch (err) { alert('Failed to update status: ' + err.message); }
+}
+
+async function viewJob(id) {
+    try {
+        const response = await apiFetch(`/jobs/${id}`);
+        const j = await response.json();
+        document.getElementById('modalJobTitle').textContent = j.title;
+        document.getElementById('modalJobDesc').textContent = j.description || '';
+        document.getElementById('modalJobExp').textContent = j.experience_years ? `${j.experience_years}+ years` : '—';
+        document.getElementById('modalJobLoc').textContent = j.location || '—';
+        document.getElementById('modalJobRemote').textContent =
+            j.remote === 'true' ? 'Yes' : j.remote === 'false' ? 'No' : '—';
+        document.getElementById('modalJobRequired').innerHTML = (j.required_skills || []).map(s =>
+            `<span class="bg-brand-light text-brand-blue text-xs font-medium px-2 py-0.5 rounded-full">${s}</span>`
+        ).join('');
+        document.getElementById('modalJobNice').innerHTML = (j.nice_to_have_skills || []).map(s =>
+            `<span class="bg-slate-100 text-slate-600 text-xs font-medium px-2 py-0.5 rounded-full">${s}</span>`
+        ).join('');
+        document.getElementById('jobModal').classList.remove('hidden');
+    } catch (err) { alert(err.message); }
+}
+
+function closeJobModal() {
+    document.getElementById('jobModal').classList.add('hidden');
 }
 
 async function deleteJob(id) {

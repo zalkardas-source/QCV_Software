@@ -365,6 +365,34 @@
         </div>
     </main>
 
+    <!-- Job Detail Modal -->
+    <div id="jobModal" class="hidden fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[85vh] overflow-y-auto">
+            <div class="flex justify-between items-center px-6 py-4 border-b border-slate-100">
+                <h3 id="modalJobTitle" class="text-lg font-bold text-slate-900"></h3>
+                <button onclick="closeJobModal()" class="text-slate-400 hover:text-slate-700 transition-colors">
+                    <i class="fa-solid fa-xmark text-xl"></i>
+                </button>
+            </div>
+            <div class="px-6 py-5 space-y-5">
+                <p id="modalJobDesc" class="text-sm text-slate-600 italic leading-relaxed"></p>
+                <div class="grid grid-cols-3 gap-4 text-sm">
+                    <div><span class="text-slate-400 text-xs uppercase font-semibold block mb-1">Experience</span><span id="modalJobExp" class="font-medium"></span></div>
+                    <div><span class="text-slate-400 text-xs uppercase font-semibold block mb-1">Location</span><span id="modalJobLoc" class="font-medium"></span></div>
+                    <div><span class="text-slate-400 text-xs uppercase font-semibold block mb-1">Remote</span><span id="modalJobRemote" class="font-medium"></span></div>
+                </div>
+                <div>
+                    <span class="text-slate-400 text-xs uppercase font-semibold block mb-2">Required Skills</span>
+                    <div id="modalJobRequired" class="flex flex-wrap gap-1.5"></div>
+                </div>
+                <div>
+                    <span class="text-slate-400 text-xs uppercase font-semibold block mb-2">Nice to Have</span>
+                    <div id="modalJobNice" class="flex flex-wrap gap-1.5"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script src="app.js?v=9"></script>
 </body>
 </html>

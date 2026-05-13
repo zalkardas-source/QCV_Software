@@ -226,7 +226,7 @@ function updatePreview(data) {
                 const div = document.createElement('div');
                 div.className = 'flex items-center gap-2 w-full py-1';
                 div.innerHTML = `
-                    <span class="text-xs text-slate-700 font-medium w-32 shrink-0 truncate" title="${name}">${name}</span>
+                    <span class="text-xs text-slate-700 font-medium w-2/5 shrink-0 break-words leading-tight">${name}</span>
                     <div class="flex-1 bg-slate-200 rounded-full h-1.5 overflow-hidden">
                         <div style="width:${pct}%; background:${barColor};" class="h-full rounded-full transition-all duration-300"></div>
                     </div>
@@ -397,7 +397,7 @@ function renderDashboardTable(cvs) {
         let skillCount = 0;
         try {
             const data = JSON.parse(cv.raw_json || "{}");
-            skillCount = (data.skill_matrix || []).length;
+            skillCount = (data.skill_matrix || []).reduce((sum, g) => sum + (g.skills || []).length, 0);
         } catch (e) { console.error("JSON Error", e); }
 
         return `

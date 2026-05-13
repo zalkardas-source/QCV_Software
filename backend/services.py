@@ -83,16 +83,36 @@ def structure_cv_data(raw_markdown: str) -> dict:
     client = OpenAI(base_url="https://openrouter.ai/api/v1", api_key=api_key)
     schema_json = CVData.model_json_schema()
     
-    # Optimized prompt: Shorter, more direct, better for lower latency
     system_prompt = f"""
     Return ONLY a valid JSON object matching this schema:
     {json.dumps(schema_json)}
-    
+
     RULES:
-    1. Skills: Extract ALL skills. Categorize logically (e.g. 'SAP', 'Dev', 'Soft Skills').
-    2. Ratings: Scale 1-10. (Expert=10, Senior=8-9, Mid=6-7, Junior=4-5, Basic=1-3).
-    3. Experience: Extract every job/project. Maintain original language for descriptions.
-    4. Format: No preamble, no markdown blocks, just raw JSON.
+
+    1. SKILLS — Extract every skill mentioned anywhere in the CV.
+       Use these standard categories (create a new one only if truly nothing fits):
+       - "Programming Languages"  (Python, Java, C#, SQL, ...)
+       - "Frameworks & Libraries" (React, Django, Spring, ...)
+       - "Databases"              (PostgreSQL, MongoDB, Oracle, ...)
+       - "Tools & Platforms"      (Git, Docker, AWS, Jira, Linux, ...)
+       - "SAP"                    (SAP ERP, S/4HANA, FI, CO, MM, SD, ...)
+       - "Data & Analytics"       (Excel, Power BI, Tableau, Pandas, ...)
+       - "Soft Skills"            (Leadership, Communication, ...)
+       - "Languages"              (English, German, French, ... — spoken languages only)
+       Do NOT repeat the same skill in multiple categories.
+
+    2. RATINGS — Assign 1-10 based on evidence in the CV:
+       - 9-10: described as expert, lead, architect, or 7+ years of heavy use
+       - 7-8:  senior/advanced level, or primary technology in most roles
+       - 5-6:  proficient, used regularly but not the main focus
+       - 3-4:  basic/foundational knowledge, or mentioned only once
+       - 1-2:  briefly mentioned, no evidence of real use
+       If no level is stated but the skill appears as a main tool → 6.
+       If mentioned only in passing → 4.
+
+    3. EXPERIENCE — Extract every job and project. Keep descriptions in the original language.
+
+    4. FORMAT — No preamble, no markdown fences, raw JSON only.
     """
     
     logger.debug("Raw CV markdown (first 500 chars):\n%s", raw_markdown[:500])

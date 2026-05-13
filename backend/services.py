@@ -24,6 +24,7 @@ from docling.datamodel.pipeline_options import PdfPipelineOptions, TableStructur
 from openai import OpenAI
 from pydantic import ValidationError
 from backend.schemas import CVData
+from backend.config import settings
 
 # Initialize Docling converter globally to cache models
 _converter = None
@@ -77,10 +78,7 @@ def extract_text_from_file(file_content: bytes, filename: str) -> str:
 
 def structure_cv_data(raw_markdown: str) -> dict:
     """Structures CV Markdown into strict JSON using Minimax-m2.7 with optimized prompt."""
-    api_key = os.getenv("OPENROUTER_API_KEY")
-    if not api_key: raise ValueError("OPENROUTER_API_KEY is not set")
-        
-    client = OpenAI(base_url="https://openrouter.ai/api/v1", api_key=api_key)
+    client = OpenAI(base_url="https://openrouter.ai/api/v1", api_key=settings.openrouter_api_key)
     schema_json = CVData.model_json_schema()
     
     system_prompt = f"""
@@ -111,9 +109,12 @@ def structure_cv_data(raw_markdown: str) -> dict:
        If the candidate claims a high level but no project confirms it, cap the rating at 4.
        Never rely solely on what the candidate states — the projects are the ground truth.
 
-    3. EXPERIENCE — Extract every job and project. Keep descriptions in the original language.
+    3. SUMMARY — Write 2-3 sentences max. Mention the candidate's field, years of experience,
+       and strongest skills. Be factual, no marketing language.
 
-    4. FORMAT — No preamble, no markdown fences, raw JSON only.
+    4. EXPERIENCE — Extract every job and project. Keep descriptions in the original language.
+
+    5. FORMAT — No preamble, no markdown fences, raw JSON only.
     """
     
     logger.debug("Raw CV markdown (first 500 chars):\n%s", raw_markdown[:500])

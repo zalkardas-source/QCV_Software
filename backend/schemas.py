@@ -14,10 +14,10 @@ class PersonalInformation(BaseModel):
 
 class Skill(BaseModel):
     skill: str = Field(description="The name of the skill, e.g. Python, Leadership")
-    rating: int = Field(default=5, description="Numeric rating 1-10. Default to 5 if level is not explicitly mentioned but skill is present.")
+    rating: int = Field(default=4, description="Numeric rating 1-10 based on evidence in the CV. See rating rules.")
 
 class SkillGroup(BaseModel):
-    category: str = Field(description="The category of the skills, e.g. SAP Modules, Programming, Soft Skills, Tools")
+    category: str = Field(description="Category of the skills. Use standard names: Programming Languages, Frameworks & Libraries, Databases, Tools & Platforms, SAP, Data & Analytics, Soft Skills, Languages.")
     skills: List[Skill] = Field(description="List of skills within this category")
 
 class Project(BaseModel):

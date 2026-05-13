@@ -101,14 +101,15 @@ def structure_cv_data(raw_markdown: str) -> dict:
        - "Languages"              (English, German, French, ... — spoken languages only)
        Do NOT repeat the same skill in multiple categories.
 
-    2. RATINGS — Assign 1-10 based on evidence in the CV:
-       - 9-10: described as expert, lead, architect, or 7+ years of heavy use
-       - 7-8:  senior/advanced level, or primary technology in most roles
-       - 5-6:  proficient, used regularly but not the main focus
-       - 3-4:  basic/foundational knowledge, or mentioned only once
-       - 1-2:  briefly mentioned, no evidence of real use
-       If no level is stated but the skill appears as a main tool → 6.
-       If mentioned only in passing → 4.
+    2. RATINGS — Assign 1-10 based on actual evidence across the entire CV.
+       Cross-reference every skill against the work experience and projects:
+       - 9-10: expert/lead/architect label AND confirmed by multiple projects as primary technology
+       - 7-8:  advanced level AND appears as a main tool in at least one significant role
+       - 5-6:  used regularly, present in project descriptions but not the main focus
+       - 3-4:  mentioned once or only in a skills list with no supporting project evidence
+       - 1-2:  briefly mentioned, no evidence of real use anywhere
+       If the candidate claims a high level but no project confirms it, cap the rating at 4.
+       Never rely solely on what the candidate states — the projects are the ground truth.
 
     3. EXPERIENCE — Extract every job and project. Keep descriptions in the original language.
 

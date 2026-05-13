@@ -264,6 +264,7 @@ def list_cvs(db: Session = Depends(get_db), user: User = Depends(get_current_use
         "email": p.email,
         "filename": p.filename,
         "created_at": p.created_at,
+        "status": p.status or "new",
         "raw_json": p.raw_json
     } for p in profiles]
 
@@ -281,6 +282,20 @@ def get_cv(cv_id: int, db: Session = Depends(get_db), user: User = Depends(get_c
         "created_at": profile.created_at,
         "data": json.loads(profile.raw_json) if profile.raw_json else {}
     }
+
+@app.patch("/api/cvs/{cv_id}/status")
+def update_cv_status(cv_id: int, payload: dict, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    """Updates the status of a CV profile."""
+    valid_statuses = {"new", "in_review", "invited", "rejected"}
+    new_status = payload.get("status")
+    if new_status not in valid_statuses:
+        raise HTTPException(status_code=422, detail=f"Invalid status. Must be one of: {sorted(valid_statuses)}")
+    profile = db.query(CVProfile).filter(CVProfile.id == cv_id).first()
+    if not profile:
+        raise HTTPException(status_code=404, detail="CV not found")
+    profile.status = new_status
+    db.commit()
+    return {"id": cv_id, "status": new_status}
 
 @app.delete("/api/cvs/{cv_id}")
 def delete_cv(cv_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):

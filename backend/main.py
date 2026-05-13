@@ -395,3 +395,82 @@ def _job_to_dict(j: JobRequirement) -> dict:
     }
 
 
+# ── CV Matching ───────────────────────────────────────────────────────────────
+
+def _match_score(candidate_skills: list, required: list, nice: list) -> dict:
+    """Scores a candidate's skills against job requirements. No LLM needed."""
+    skill_map = {}
+    for s in candidate_skills:
+        name = s.get("skill", "").lower().strip()
+        if name:
+            skill_map[name] = s.get("rating", 4)
+
+    def find(job_skill: str) -> int | None:
+        needle = job_skill.lower().strip()
+        if needle in skill_map:
+            return skill_map[needle]
+        for k, v in skill_map.items():
+            if needle in k or k in needle:
+                return v
+        return None
+
+    total_weight = len(required) * 1.0 + len(nice) * 0.5
+    if total_weight == 0:
+        return {"score": 0, "matched_required": [], "missing_required": [], "matched_nice": []}
+
+    score = 0.0
+    matched_required, missing_required, matched_nice = [], [], []
+
+    for skill in required:
+        rating = find(skill)
+        if rating is not None:
+            score += (rating / 10) * 1.0
+            matched_required.append(skill)
+        else:
+            missing_required.append(skill)
+
+    for skill in nice:
+        rating = find(skill)
+        if rating is not None:
+            score += (rating / 10) * 0.5
+            matched_nice.append(skill)
+
+    return {
+        "score": round((score / total_weight) * 100),
+        "matched_required": matched_required,
+        "missing_required": missing_required,
+        "matched_nice": matched_nice,
+    }
+
+
+@app.get("/api/jobs/{job_id}/matches")
+def match_candidates(job_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    """Returns all candidates scored and sorted against a job requirement."""
+    job = db.query(JobRequirement).filter(JobRequirement.id == job_id).first()
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    required = json.loads(job.required_skills or "[]")
+    nice = json.loads(job.nice_to_have_skills or "[]")
+
+    profiles = db.query(CVProfile).all()
+    results = []
+    for p in profiles:
+        raw = json.loads(p.raw_json or "{}") if p.raw_json else {}
+        candidate_skills = [
+            s for group in raw.get("skill_matrix", [])
+            for s in group.get("skills", [])
+        ]
+        match = _match_score(candidate_skills, required, nice)
+        results.append({
+            "id": p.id,
+            "name": p.name,
+            "email": p.email,
+            "status": p.status or "new",
+            **match,
+        })
+
+    results.sort(key=lambda x: x["score"], reverse=True)
+    return results
+
+

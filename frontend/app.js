@@ -716,8 +716,14 @@ async function matchCandidates() {
                 </div>
                 <div class="flex-1 min-w-0">
                     <div class="flex items-center justify-between mb-2">
-                        <span class="font-semibold text-slate-800">${c.name || 'Unknown'}</span>
-                        <span class="text-xs text-slate-400">${c.email || ''}</span>
+                        <div>
+                            <span class="font-semibold text-slate-800">${c.name || 'Unknown'}</span>
+                            <span class="text-xs text-slate-400 ml-2">${c.email || ''}</span>
+                        </div>
+                        <button onclick="closeJobModal(); viewCV(${c.id})"
+                            class="p-1.5 rounded hover:bg-brand-light text-slate-400 hover:text-brand-blue transition-colors flex-shrink-0" title="Kandidat anzeigen">
+                            <i class="fa-solid fa-eye text-sm"></i>
+                        </button>
                     </div>
                     <div class="flex flex-wrap gap-1.5">${matched}${missing}${nice}</div>
                 </div>

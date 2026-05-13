@@ -776,14 +776,15 @@ async function matchCandidates() {
             const scoreClass = c.score >= 70 ? 'bg-green-50 text-green-700 border-green-200' :
                                c.score >= 40 ? 'bg-amber-50 text-amber-700 border-amber-200' :
                                               'bg-red-50 text-red-500 border-red-200';
+            const label = s => s.replace(/\s*\(.*?\)/g, '').trim();
             const matched = c.matched_required.map(s =>
-                `<span class="bg-green-50 text-green-700 text-xs px-1.5 py-0.5 rounded border border-green-200">${s}</span>`
+                `<span class="bg-green-50 text-green-700 text-xs px-1.5 py-0.5 rounded border border-green-200">${label(s)}</span>`
             ).join('');
             const missing = c.missing_required.map(s =>
-                `<span class="bg-red-50 text-red-500 text-xs px-1.5 py-0.5 rounded border border-red-200 line-through">${s}</span>`
+                `<span class="bg-red-50 text-red-500 text-xs px-1.5 py-0.5 rounded border border-red-200 line-through">${label(s)}</span>`
             ).join('');
             const nice = c.matched_nice.map(s =>
-                `<span class="bg-blue-50 text-blue-600 text-xs px-1.5 py-0.5 rounded border border-blue-100">${s}</span>`
+                `<span class="bg-blue-50 text-blue-600 text-xs px-1.5 py-0.5 rounded border border-blue-100">${label(s)}</span>`
             ).join('');
 
             return `

@@ -467,13 +467,21 @@ def _match_score(candidate_skills: list, required: list, nice: list) -> dict:
         for k, v in skill_map.items():
             if needle in k or k in needle:
                 return v
-        # 3. Token-overlap: handles compound job requirements like "SAP Modulbetreuung (MM oder SD)"
-        #    A candidate with "SAP MM" has tokens {"sap","mm"} — which are a subset of the job tokens.
+        # 3. Token-overlap: for compound job requirements like "SAP Modulbetreuung (MM oder SD)".
+        #    "SAP MM" candidate (tokens {"sap","mm"}) ⊆ job tokens {"sap","modulbetreuung","mm","sd"} → match.
+        #    Guard: only apply candidate⊆job direction when candidate has ≥2 tokens,
+        #    so single-word "SAP" does NOT falsely match multi-word "SAP MM".
         needle_tokens = _tokens(job_skill)
         if needle_tokens:
             for k, v in skill_map.items():
                 k_tokens = _tokens(k)
-                if k_tokens and (k_tokens.issubset(needle_tokens) or needle_tokens.issubset(k_tokens)):
+                if not k_tokens:
+                    continue
+                # Candidate skill is a specific sub-skill of a compound requirement
+                if len(k_tokens) >= 2 and k_tokens.issubset(needle_tokens):
+                    return v
+                # Candidate skill is a superset of the job requirement (candidate knows more)
+                if needle_tokens.issubset(k_tokens):
                     return v
         return None
 

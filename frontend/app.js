@@ -19,6 +19,7 @@ const btnSaveDB = document.getElementById('btnSaveDB');
 const btnGeneratePPTX = document.getElementById('btnGeneratePPTX');
 const navDashboardBtn = document.getElementById('navDashboardBtn');
 const navUploadBtn = document.getElementById('navUploadBtn');
+const navJobsBtn = document.getElementById('navJobsBtn');
 const btnLogout = document.getElementById('btnLogout');
 const loginForm = document.getElementById('loginForm');
 
@@ -43,8 +44,10 @@ async function apiFetch(endpoint, options = {}) {
 }
 
 // ── Navigation & Initialization ─────────────────────────────────
+const jobsView = document.getElementById('jobsView');
+
 function showView(viewId) {
-    [uploadView, loadingView, resultsView, dashboardView, loginView].forEach(v => {
+    [uploadView, loadingView, resultsView, dashboardView, loginView, jobsView].forEach(v => {
         v.classList.add('hidden');
         v.classList.remove('flex');
     });
@@ -74,6 +77,11 @@ navDashboardBtn.addEventListener('click', () => {
 
 navUploadBtn.addEventListener('click', () => {
     showView('uploadView');
+});
+
+navJobsBtn.addEventListener('click', () => {
+    showView('jobsView');
+    loadJobs();
 });
 
 btnLogout.addEventListener('click', logout);
@@ -487,6 +495,150 @@ async function updateStatus(id, newStatus) {
         document.getElementById('statNew').textContent = allCVs.filter(c => (c.status || 'new') === 'new').length;
         document.getElementById('statInvited').textContent = allCVs.filter(c => c.status === 'invited').length;
     } catch (err) { alert('Failed to update status: ' + err.message); }
+}
+
+// ── Jobs ────────────────────────────────────────────────────────────────────
+
+let currentJobData = null;
+
+async function parseJobEmail() {
+    const emailText = document.getElementById('jobEmailInput').value.trim();
+    if (!emailText) { alert('Please paste an email first.'); return; }
+
+    const btn = document.getElementById('btnParseEmail');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-spinner spinner mr-2"></i> Parsing...';
+
+    try {
+        const response = await apiFetch('/jobs/parse-email', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email_text: emailText }),
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.detail || 'Parsing failed');
+        currentJobData = result.data;
+        renderJobPreview(currentJobData);
+        document.getElementById('jobPreviewCard').classList.remove('hidden');
+    } catch (err) {
+        alert('Error: ' + err.message);
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-wand-magic-sparkles"></i> Parse Email';
+    }
+}
+
+function renderJobPreview(data) {
+    document.getElementById('jobPreviewTitle').textContent = data.title || '—';
+    document.getElementById('jobPreviewDesc').textContent = data.description || '';
+    document.getElementById('jobPreviewExp').textContent = data.experience_years ? `${data.experience_years}+ years` : '—';
+    document.getElementById('jobPreviewLoc').textContent = data.location || '—';
+    document.getElementById('jobPreviewRemote').textContent =
+        data.remote === true || data.remote === 'true' ? 'Yes' :
+        data.remote === false || data.remote === 'false' ? 'No' : '—';
+
+    const req = document.getElementById('jobPreviewRequired');
+    req.innerHTML = (data.required_skills || []).map(s =>
+        `<span class="bg-brand-light text-brand-blue text-xs font-medium px-2 py-0.5 rounded-full">${s}</span>`
+    ).join('');
+
+    const nice = document.getElementById('jobPreviewNice');
+    nice.innerHTML = (data.nice_to_have_skills || []).map(s =>
+        `<span class="bg-slate-100 text-slate-600 text-xs font-medium px-2 py-0.5 rounded-full">${s}</span>`
+    ).join('');
+}
+
+async function saveJob() {
+    if (!currentJobData) return;
+    try {
+        const response = await apiFetch('/jobs', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                data: currentJobData,
+                raw_email: document.getElementById('jobEmailInput').value.trim(),
+            }),
+        });
+        if (!response.ok) throw new Error('Save failed');
+        document.getElementById('jobPreviewCard').classList.add('hidden');
+        document.getElementById('jobEmailInput').value = '';
+        currentJobData = null;
+        loadJobs();
+    } catch (err) {
+        alert('Error saving job: ' + err.message);
+    }
+}
+
+async function loadJobs() {
+    const tbody = document.getElementById('jobsTableBody');
+    tbody.innerHTML = '<tr><td colspan="7" class="text-center py-10 text-slate-400"><i class="fa-solid fa-spinner spinner mr-2"></i>Loading...</td></tr>';
+    try {
+        const response = await apiFetch('/jobs');
+        const jobs = await response.json();
+        renderJobsTable(jobs);
+    } catch (err) {
+        tbody.innerHTML = `<tr><td colspan="7" class="text-center py-10 text-red-400">Failed to load jobs.</td></tr>`;
+    }
+}
+
+const JOB_STATUS_CONFIG = {
+    open:      { label: 'Open',      classes: 'bg-blue-50 text-blue-600 border-blue-200' },
+    filled:    { label: 'Filled',    classes: 'bg-green-50 text-green-600 border-green-200' },
+    cancelled: { label: 'Cancelled', classes: 'bg-red-50 text-red-500 border-red-200' },
+};
+
+function renderJobsTable(jobs) {
+    const tbody = document.getElementById('jobsTableBody');
+    const empty = document.getElementById('jobsEmpty');
+    if (!jobs.length) { tbody.innerHTML = ''; empty.classList.remove('hidden'); return; }
+    empty.classList.add('hidden');
+    tbody.innerHTML = jobs.map(j => {
+        const date = j.created_at ? new Date(j.created_at).toLocaleDateString('de-DE') : '—';
+        const skills = (j.required_skills || []).slice(0, 4).map(s =>
+            `<span class="bg-brand-light text-brand-blue text-xs px-1.5 py-0.5 rounded">${s}</span>`
+        ).join(' ');
+        const cfg = JOB_STATUS_CONFIG[j.status] || JOB_STATUS_CONFIG.open;
+        const statusOpts = Object.entries(JOB_STATUS_CONFIG).map(([v, c]) =>
+            `<option value="${v}" ${v === j.status ? 'selected' : ''}>${c.label}</option>`
+        ).join('');
+        return `
+        <tr class="border-b border-slate-100 hover:bg-slate-50/80 transition-colors group">
+            <td class="px-5 py-3 text-slate-400 font-mono text-xs">${j.id}</td>
+            <td class="px-5 py-3 font-semibold text-slate-800">${j.title}</td>
+            <td class="px-5 py-3"><div class="flex flex-wrap gap-1">${skills}</div></td>
+            <td class="px-5 py-3 text-slate-500">${j.location || '—'}</td>
+            <td class="px-5 py-3">
+                <select onchange="updateJobStatus(${j.id}, this.value)"
+                    class="text-xs font-semibold border rounded-full px-2 py-1 cursor-pointer outline-none ${cfg.classes}">
+                    ${statusOpts}
+                </select>
+            </td>
+            <td class="px-5 py-3 text-slate-500">${date}</td>
+            <td class="px-5 py-3 text-right">
+                <button onclick="deleteJob(${j.id})" class="p-1.5 rounded hover:bg-red-50 text-slate-500 hover:text-red-500 opacity-60 group-hover:opacity-100 transition-all">
+                    <i class="fa-solid fa-trash-can text-sm"></i>
+                </button>
+            </td>
+        </tr>`;
+    }).join('');
+}
+
+async function updateJobStatus(id, newStatus) {
+    try {
+        await apiFetch(`/jobs/${id}/status`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status: newStatus }),
+        });
+    } catch (err) { alert('Failed to update status: ' + err.message); }
+}
+
+async function deleteJob(id) {
+    if (!confirm('Delete this job requirement?')) return;
+    try {
+        await apiFetch(`/jobs/${id}`, { method: 'DELETE' });
+        loadJobs();
+    } catch (err) { alert(err.message); }
 }
 
 let activeFilter = 'all';

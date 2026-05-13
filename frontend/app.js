@@ -411,28 +411,28 @@ function renderDashboardTable(cvs) {
         } catch (e) { console.error("JSON Error", e); }
 
         return `
-        <tr class="border-b border-slate-100 hover:bg-slate-50/80 transition-colors group">
-            <td class="px-5 py-3 text-slate-400 font-mono text-xs">${cv.id}</td>
-            <td class="px-5 py-3">
-                <div class="flex items-center gap-3">
-                    <div class="w-8 h-8 rounded-full bg-brand-light text-brand-blue flex items-center justify-center text-xs font-bold flex-shrink-0">${initials}</div>
-                    <span class="font-semibold text-slate-800">${cv.name || 'Unknown'}</span>
+        <tr class="border-b border-slate-100 hover:bg-slate-50/80 transition-colors">
+            <td class="px-3 py-2.5 text-slate-400 font-mono text-xs">${cv.id}</td>
+            <td class="px-3 py-2.5">
+                <div class="flex items-center gap-2">
+                    <div class="w-7 h-7 rounded-full bg-brand-light text-brand-blue flex items-center justify-center text-xs font-bold flex-shrink-0">${initials}</div>
+                    <span class="font-semibold text-slate-800 text-sm">${cv.name || 'Unknown'}</span>
                 </div>
             </td>
-            <td class="px-5 py-3 text-slate-500">${cv.email || '-'}</td>
-            <td class="px-5 py-3"><span class="bg-slate-100 text-slate-600 px-2 py-0.5 rounded text-xs font-mono">${cv.filename || '-'}</span></td>
-            <td class="px-5 py-3">
-                <span class="px-2 py-1 bg-blue-50 text-blue-600 rounded-full text-xs font-bold border border-blue-100">
+            <td class="px-3 py-2.5 text-slate-500 text-xs max-w-[160px]"><span class="block truncate" title="${cv.email || ''}">${cv.email || '-'}</span></td>
+            <td class="px-3 py-2.5 max-w-[120px]"><span class="bg-slate-100 text-slate-600 px-2 py-0.5 rounded text-xs font-mono block truncate" title="${cv.filename || ''}">${cv.filename || '-'}</span></td>
+            <td class="px-3 py-2.5">
+                <span class="px-2 py-1 bg-blue-50 text-blue-600 rounded-full text-xs font-bold border border-blue-100 whitespace-nowrap">
                     ${skillCount} Skills
                 </span>
             </td>
-            <td class="px-5 py-3">${renderStatusSelect(cv.id, cv.status || 'new')}</td>
-            <td class="px-5 py-3 text-slate-500">${date}</td>
-            <td class="px-5 py-3 text-right">
-                <div class="flex items-center justify-end gap-1 opacity-60 group-hover:opacity-100 transition-opacity">
-                    <button onclick="previewCandidate(${cv.id})" class="p-1.5 rounded hover:bg-brand-light text-slate-500 hover:text-brand-blue transition-colors"><i class="fa-solid fa-eye text-sm"></i></button>
-                    <button onclick="downloadCVPPTX(${cv.id})" class="p-1.5 rounded hover:bg-green-50 text-slate-500 hover:text-green-600 transition-colors"><i class="fa-solid fa-file-powerpoint text-sm"></i></button>
-                    <button onclick="deleteCV(${cv.id})" class="p-1.5 rounded hover:bg-red-50 text-slate-500 hover:text-red-500 transition-colors"><i class="fa-solid fa-trash-can text-sm"></i></button>
+            <td class="px-3 py-2.5">${renderStatusSelect(cv.id, cv.status || 'new')}</td>
+            <td class="px-3 py-2.5 text-slate-500 text-xs whitespace-nowrap">${date}</td>
+            <td class="px-3 py-2.5 text-right">
+                <div class="flex items-center justify-end gap-1">
+                    <button onclick="previewCandidate(${cv.id})" class="p-1.5 rounded hover:bg-brand-light text-slate-400 hover:text-brand-blue transition-colors" title="Anzeigen"><i class="fa-solid fa-eye text-sm"></i></button>
+                    <button onclick="downloadCVPPTX(${cv.id})" class="p-1.5 rounded hover:bg-green-50 text-slate-400 hover:text-green-600 transition-colors" title="PPTX"><i class="fa-solid fa-file-powerpoint text-sm"></i></button>
+                    <button onclick="deleteCV(${cv.id})" class="p-1.5 rounded hover:bg-red-50 text-slate-400 hover:text-red-500 transition-colors" title="Löschen"><i class="fa-solid fa-trash-can text-sm"></i></button>
                 </div>
             </td>
         </tr>`;

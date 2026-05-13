@@ -44,21 +44,29 @@ def _add_text(slide, left, top, width, height, text, font_size=11,
     return tf
 
 def _add_skill_bar(slide, left, top, width, label, rating, max_rating=10):
-    bar_h = Inches(0.18)
-    label_w = Inches(2.2)
-    bar_w = width - label_w - Inches(0.15)
+    dot_d   = Inches(0.09)
+    dot_gap = Inches(0.035)
+    dots_w  = 10 * dot_d + 9 * dot_gap
+    label_w = width - dots_w - Inches(0.15)
+
     clean_label = str(label)[:35] + "..." if len(str(label)) > 38 else str(label)
     _add_text(slide, left, top - Inches(0.02), label_w, Inches(0.25),
-              clean_label, font_size=9, color=DARK_GREY, bold=True)
-    bar_left = left + label_w + Inches(0.15)
-    _add_rect(slide, bar_left, top, bar_w, bar_h, SKILL_BAR_BG)
+              clean_label, font_size=9, color=DARK_GREY, bold=False)
+
     try:
-        r = int(rating)
-    except:
+        r = min(max(int(rating), 0), 10)
+    except Exception:
         r = 0
-    if r > 0:
-        filled_w = bar_w * (min(r, 10) / max_rating)
-        _add_rect(slide, bar_left, top, filled_w, bar_h, CORP_BLUE)
+
+    dots_left = left + label_w + Inches(0.15)
+    dot_top   = top + (Inches(0.18) - dot_d) / 2
+
+    for i in range(10):
+        dot_left = dots_left + i * (dot_d + dot_gap)
+        shape = slide.shapes.add_shape(MSO_SHAPE.OVAL, dot_left, dot_top, dot_d, dot_d)
+        shape.fill.solid()
+        shape.fill.fore_color.rgb = CORP_BLUE if i < r else SKILL_BAR_BG
+        shape.line.fill.background()
 
 def create_pptx_summary(data: dict) -> bytes:
     prs = Presentation()
@@ -137,9 +145,10 @@ def create_pptx_summary(data: dict) -> bytes:
             curr_y = s_y_start
 
         cat_name = group.get("category", "General").upper()
-        _add_text(slide, s_cols_x[curr_col], curr_y, s_col_w, Inches(0.25),
-                  cat_name, font_size=s_font - 1, bold=True, color=MID_GREY)
-        curr_y += Inches(0.2)
+        _add_text(slide, s_cols_x[curr_col], curr_y, s_col_w, Inches(0.18),
+                  cat_name, font_size=7, bold=True, color=RGBColor(180, 185, 195))
+        _add_rect(slide, s_cols_x[curr_col], curr_y + Inches(0.16), s_col_w - Inches(0.2), Inches(0.008), SKILL_BAR_BG)
+        curr_y += Inches(0.22)
 
         skills_list = group.get("skills", [])
         for s_idx, s in enumerate(skills_list):
@@ -179,9 +188,10 @@ def create_pptx_summary(data: dict) -> bytes:
         for group in remaining_groups:
             if cs_col >= 3: break
             cat_name = group.get("category", "General").upper()
-            _add_text(skill_slide, s_cols_x[cs_col], cs_y, s_col_w, Inches(0.25),
-                      cat_name, font_size=8, bold=True, color=CORP_BLUE)
-            cs_y += Inches(0.25)
+            _add_text(skill_slide, s_cols_x[cs_col], cs_y, s_col_w, Inches(0.18),
+                      cat_name, font_size=7, bold=True, color=RGBColor(180, 185, 195))
+            _add_rect(skill_slide, s_cols_x[cs_col], cs_y + Inches(0.16), s_col_w - Inches(0.2), Inches(0.008), SKILL_BAR_BG)
+            cs_y += Inches(0.22)
             cs_lines += 1
 
             for s in group.get("skills", []):

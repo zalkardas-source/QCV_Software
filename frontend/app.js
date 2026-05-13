@@ -430,7 +430,7 @@ function renderDashboardTable(cvs) {
             <td class="px-5 py-3 text-slate-500">${date}</td>
             <td class="px-5 py-3 text-right">
                 <div class="flex items-center justify-end gap-1 opacity-60 group-hover:opacity-100 transition-opacity">
-                    <button onclick="viewCV(${cv.id})" class="p-1.5 rounded hover:bg-brand-light text-slate-500 hover:text-brand-blue transition-colors"><i class="fa-solid fa-eye text-sm"></i></button>
+                    <button onclick="previewCandidate(${cv.id})" class="p-1.5 rounded hover:bg-brand-light text-slate-500 hover:text-brand-blue transition-colors"><i class="fa-solid fa-eye text-sm"></i></button>
                     <button onclick="downloadCVPPTX(${cv.id})" class="p-1.5 rounded hover:bg-green-50 text-slate-500 hover:text-green-600 transition-colors"><i class="fa-solid fa-file-powerpoint text-sm"></i></button>
                     <button onclick="deleteCV(${cv.id})" class="p-1.5 rounded hover:bg-red-50 text-slate-500 hover:text-red-500 transition-colors"><i class="fa-solid fa-trash-can text-sm"></i></button>
                 </div>
@@ -642,6 +642,83 @@ async function deleteJob(id) {
     } catch (err) { alert(err.message); }
 }
 
+// ── Candidate Detail Modal ───────────────────────────────────────────────────
+
+let currentCandidateId = null;
+
+function closeCandidateModal() {
+    document.getElementById('candidateModal').classList.add('hidden');
+    currentCandidateId = null;
+}
+
+async function previewCandidate(id) {
+    currentCandidateId = id;
+    try {
+        const response = await apiFetch(`/cvs/${id}`);
+        const cv = await response.json();
+        const data = cv.data || {};
+        const personal = data.personal_information || {};
+
+        const name = personal.full_name || 'Unknown';
+        const initials = name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+        document.getElementById('candidateModalAvatar').textContent = initials;
+        document.getElementById('candidateModalName').textContent = name;
+        document.getElementById('candidateModalEmail').textContent = personal.email || '';
+        document.getElementById('candidateModalLocation').textContent = personal.location ? `📍 ${personal.location}` : '';
+        document.getElementById('candidateModalSummary').textContent = data.small_summary || '';
+
+        document.getElementById('candidateModalEditBtn').onclick = () => {
+            closeCandidateModal();
+            currentData = data;
+            currentFilename = cv.filename;
+            showView('resultsView');
+            jsonEditor.value = JSON.stringify(data, null, 4);
+            updatePreview(data);
+        };
+
+        const skillsContainer = document.getElementById('candidateModalSkills');
+        skillsContainer.innerHTML = '';
+        (data.skill_matrix || []).forEach(group => {
+            const section = document.createElement('div');
+            const header = document.createElement('div');
+            header.className = 'text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2';
+            header.textContent = group.category || 'General';
+            section.appendChild(header);
+            (group.skills || []).forEach(s => {
+                const r = Math.min(10, Math.max(0, parseInt(s.rating) || 5));
+                const pct = (r / 10) * 100;
+                const color = r >= 8 ? '#22c55e' : r >= 5 ? '#f59e0b' : '#ef4444';
+                const row = document.createElement('div');
+                row.className = 'flex items-center gap-2 py-0.5';
+                row.innerHTML = `
+                    <span class="text-xs text-slate-700 w-40 shrink-0 truncate">${s.skill}</span>
+                    <div class="flex-1 bg-slate-200 rounded-full h-1.5 overflow-hidden">
+                        <div style="width:${pct}%;background:${color}" class="h-full rounded-full"></div>
+                    </div>
+                    <span class="text-xs font-bold w-5 text-right shrink-0" style="color:${color}">${r}</span>`;
+                section.appendChild(row);
+            });
+            skillsContainer.appendChild(section);
+        });
+
+        const projectsContainer = document.getElementById('candidateModalProjects');
+        projectsContainer.innerHTML = '';
+        (data.projects || []).forEach(p => {
+            const div = document.createElement('div');
+            div.className = 'border-l-2 border-brand-blue pl-3 py-0.5';
+            div.innerHTML = `
+                <div class="text-sm font-bold text-slate-900">${p.name || 'Unnamed'}</div>
+                <div class="text-xs text-slate-400 mb-1">${p.duration || ''}</div>
+                <div class="text-xs text-slate-600 line-clamp-3">${p.description || ''}</div>`;
+            projectsContainer.appendChild(div);
+        });
+
+        document.getElementById('candidateModal').classList.remove('hidden');
+    } catch (err) {
+        alert('Error loading candidate: ' + err.message);
+    }
+}
+
 // ── Job Detail Modal & Matching ─────────────────────────────────────────────
 
 let currentJobId = null;
@@ -720,7 +797,7 @@ async function matchCandidates() {
                             <span class="font-semibold text-slate-800">${c.name || 'Unknown'}</span>
                             <span class="text-xs text-slate-400 ml-2">${c.email || ''}</span>
                         </div>
-                        <button onclick="closeJobModal(); viewCV(${c.id})"
+                        <button onclick="previewCandidate(${c.id})"
                             class="p-1.5 rounded hover:bg-brand-light text-slate-400 hover:text-brand-blue transition-colors flex-shrink-0" title="Kandidat anzeigen">
                             <i class="fa-solid fa-eye text-sm"></i>
                         </button>

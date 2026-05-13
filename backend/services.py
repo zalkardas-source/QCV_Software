@@ -189,14 +189,26 @@ def parse_job_email(email_text: str) -> dict:
     {json.dumps(schema_json)}
 
     RULES:
-    1. TITLE — Extract the exact job title or role the client is looking for.
+    1. TITLE — Extract the exact job title or role.
     2. DESCRIPTION — Summarize the role in 2-3 sentences. Be factual.
-    3. REQUIRED SKILLS — List only skills explicitly stated as required or mandatory.
-    4. NICE TO HAVE — List skills mentioned as optional, preferred, or beneficial.
-    5. EXPERIENCE — Extract the minimum years of experience as an integer. Null if not mentioned.
-    6. LOCATION — City or region. Null if not mentioned.
-    7. REMOTE — true if remote is explicitly offered, false if explicitly on-site only, null if unclear.
-    8. FORMAT — No preamble, no markdown fences, raw JSON only.
+    3. REQUIRED SKILLS and NICE TO HAVE — CRITICAL FORMATTING RULES:
+       a. Each entry must be ONE single skill or technology. Never combine two skills with "or/oder/and/und".
+          WRONG: "SAP MM oder SD",  "Python oder Java",  "MM/SD"
+          RIGHT: ["SAP MM", "SAP SD"],  ["Python", "Java"]
+       b. Strip all qualifiers — output the bare skill name only.
+          WRONG: "Python-Kenntnisse", "Erfahrung mit SAP", "gute Excel-Kenntnisse", "grundlegendes SQL"
+          RIGHT: "Python", "SAP", "Excel", "SQL"
+       c. Use the EXACT SAME canonical skill names a CV parser would output:
+          - SAP modules: "SAP MM", "SAP SD", "SAP FI", "SAP CO", "SAP HCM", "SAP PP", "SAP WM", "SAP EWM", "SAP S/4HANA"
+          - Programming: "Python", "Java", "C#", "C++", "JavaScript", "TypeScript", "SQL"
+          - Databases: "PostgreSQL", "MySQL", "Oracle", "MongoDB"
+          - Tools: "Git", "Docker", "Excel", "Power BI", "Jira", "Linux"
+          - Spoken languages: always in English — "English", "German", "French", "Spanish"
+       d. If a requirement lists alternative modules like "(MM oder SD)", split into one entry per module.
+    4. EXPERIENCE — Minimum years as integer. Null if not mentioned.
+    5. LOCATION — City or region. Null if not mentioned.
+    6. REMOTE — true if remote explicitly offered, false if explicitly on-site only, null if unclear.
+    7. FORMAT — No preamble, no markdown fences, raw JSON only.
     """
 
     messages = [

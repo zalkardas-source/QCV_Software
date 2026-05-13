@@ -365,6 +365,43 @@
         </div>
     </main>
 
+    <!-- Candidate Detail Modal -->
+    <div id="candidateModal" class="hidden fixed inset-0 bg-black/60 z-[60] flex items-center justify-center p-4" onclick="if(event.target===this)closeCandidateModal()">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
+            <div class="flex justify-between items-start p-6 border-b border-slate-200">
+                <div class="flex items-center gap-4">
+                    <div id="candidateModalAvatar" class="w-12 h-12 rounded-full bg-brand-light text-brand-blue flex items-center justify-center text-lg font-bold flex-shrink-0">??</div>
+                    <div>
+                        <h2 id="candidateModalName" class="text-xl font-bold text-slate-900"></h2>
+                        <div class="flex items-center gap-3 mt-0.5 text-sm text-slate-500">
+                            <span id="candidateModalEmail"></span>
+                            <span id="candidateModalLocation"></span>
+                        </div>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2 ml-4 flex-shrink-0">
+                    <button id="candidateModalEditBtn" class="text-xs font-medium text-brand-blue hover:text-brand-dark border border-brand-blue rounded-lg px-3 py-1.5 flex items-center gap-1.5 transition-colors">
+                        <i class="fa-solid fa-pen-to-square text-xs"></i> Bearbeiten
+                    </button>
+                    <button onclick="closeCandidateModal()" class="text-slate-400 hover:text-slate-600 transition-colors">
+                        <i class="fa-solid fa-xmark text-xl"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="overflow-y-auto flex-1 p-6">
+                <p id="candidateModalSummary" class="text-sm text-slate-600 italic mb-5"></p>
+                <div class="mb-5">
+                    <h3 class="font-semibold text-slate-800 mb-3">Skills</h3>
+                    <div id="candidateModalSkills" class="space-y-4"></div>
+                </div>
+                <div>
+                    <h3 class="font-semibold text-slate-800 mb-3">Erfahrung &amp; Projekte</h3>
+                    <div id="candidateModalProjects" class="space-y-3"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Job Detail Modal -->
     <div id="jobModal" class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onclick="if(event.target===this)closeJobModal()">
         <div class="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col">
@@ -409,6 +446,6 @@
         </div>
     </div>
 
-    <script src="app.js?v=10"></script>
+    <script src="app.js?v=11"></script>
 </body>
 </html>

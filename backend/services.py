@@ -1,7 +1,10 @@
+import logging
 import os
 import sys
 import json
 import tempfile
+
+logger = logging.getLogger(__name__)
 
 # Windows DLL Fix for PyTorch/Docling
 if os.name == 'nt':
@@ -43,12 +46,12 @@ def get_docling_converter():
 
 def warmup_docling():
     """Initializes the Docling model to avoid delays during the first request."""
-    print("Warming up Docling Engine...")
+    logger.info("Warming up Docling engine...")
     try:
         get_docling_converter()
-        print("Docling Engine optimized and ready.")
+        logger.info("Docling engine ready.")
     except Exception as e:
-        print(f"Warmup ERROR: {e}")
+        logger.error("Docling warmup failed: %s", e)
 
 def extract_text_from_file(file_content: bytes, filename: str) -> str:
     """Extracts markdown from a document using Docling."""
@@ -65,7 +68,7 @@ def extract_text_from_file(file_content: bytes, filename: str) -> str:
         result = converter.convert(tmp_path)
         return result.document.export_to_markdown()
     except Exception as e:
-        print(f"Docling ERROR: {type(e).__name__}: {str(e)}")
+        logger.error("Docling conversion error: %s: %s", type(e).__name__, e)
         raise e
     finally:
         if os.path.exists(tmp_path):
@@ -92,8 +95,7 @@ def structure_cv_data(raw_markdown: str) -> dict:
     4. Format: No preamble, no markdown blocks, just raw JSON.
     """
     
-    # DEBUG: See what Docling actually finds
-    print(f"--- DEBUG: RAW CV MARKDOWN (first 500 chars) ---\n{raw_markdown[:500]}\n--- END ---")
+    logger.debug("Raw CV markdown (first 500 chars):\n%s", raw_markdown[:500])
 
     messages = [
         {"role": "system", "content": system_prompt},
@@ -104,22 +106,21 @@ def structure_cv_data(raw_markdown: str) -> dict:
     for attempt in range(max_retries):
         text_content = None
         try:
-            print(f"[LLM] Extraction attempt {attempt + 1}/{max_retries}...")
+            logger.info("[LLM] Extraction attempt %d/%d", attempt + 1, max_retries)
             response = client.chat.completions.create(
                 model="minimax/minimax-m2.7",
                 messages=messages,
                 temperature=0.1
             )
             
-            print(f"[LLM] Response received. Choices: {len(response.choices)}")
+            logger.debug("[LLM] Response received. Choices: %d", len(response.choices))
             
             if not response.choices or not response.choices[0].message.content:
-                print(f"[LLM] ERROR: Empty response from API! Full response: {response}")
+                logger.error("[LLM] Empty response from API. Full response: %s", response)
                 raise ValueError("LLM returned an empty response. The model may be unavailable.")
             
             text_content = response.choices[0].message.content.strip()
-            print(f"[LLM] Raw response length: {len(text_content)}")
-            print(f"[LLM] First 200 chars: {text_content[:200]}")
+            logger.debug("[LLM] Raw response length: %d, first 200 chars: %s", len(text_content), text_content[:200])
             
             # Clean up potential markdown formatting just in case
             if text_content.startswith("```json"):
@@ -132,12 +133,12 @@ def structure_cv_data(raw_markdown: str) -> dict:
             # VALIDATION STEP: The Mold checks the data
             validated_data = CVData(**parsed_json)
             
-            print("[LLM] Validation successful!")
+            logger.info("[LLM] Validation successful.")
             # Return as dict for the database
             return validated_data.model_dump()
             
         except (json.JSONDecodeError, ValidationError) as e:
-            print(f"[LLM] Validation failed on attempt {attempt + 1}: {str(e)}")
+            logger.warning("[LLM] Validation failed on attempt %d: %s", attempt + 1, e)
             if attempt == max_retries - 1:
                 raise ValueError(f"Failed to extract structured data after {max_retries} attempts. Last error: {str(e)}")
                 
@@ -150,8 +151,6 @@ def structure_cv_data(raw_markdown: str) -> dict:
             
         except Exception as e:
             # Catch API errors, timeouts, auth failures, etc.
-            print(f"[LLM] UNEXPECTED ERROR on attempt {attempt + 1}: {type(e).__name__}: {str(e)}")
-            import traceback
-            traceback.print_exc()
+            logger.exception("[LLM] Unexpected error on attempt %d: %s: %s", attempt + 1, type(e).__name__, e)
             if attempt == max_retries - 1:
                 raise ValueError(f"LLM API error: {type(e).__name__}: {str(e)}")

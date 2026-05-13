@@ -24,8 +24,8 @@ import os
 load_dotenv()
 
 from backend.database import engine, Base, get_db, SessionLocal
-from backend.models import User, CVProfile, Skill, Project
-from backend.services import extract_text_from_file, structure_cv_data, warmup_docling
+from backend.models import User, CVProfile, Skill, Project, JobRequirement
+from backend.services import extract_text_from_file, structure_cv_data, warmup_docling, parse_job_email
 from backend.export_pptx import create_pptx_summary
 
 # Initialize DB tables
@@ -306,5 +306,92 @@ def delete_cv(cv_id: int, db: Session = Depends(get_db), user: User = Depends(ge
     db.delete(profile)
     db.commit()
     return {"status": "deleted", "id": cv_id}
+
+
+# ── Job Requirements ─────────────────────────────────────────────────────────
+
+@app.post("/api/jobs/parse-email")
+async def parse_email_to_job(payload: dict, user: User = Depends(get_current_user)):
+    """Extracts structured job requirements from a client email text."""
+    email_text = payload.get("email_text", "").strip()
+    if not email_text:
+        raise HTTPException(status_code=422, detail="email_text is required")
+    try:
+        result = await anyio.to_thread.run_sync(parse_job_email, email_text)
+        return {"status": "success", "data": result}
+    except Exception as e:
+        logger.error("Job email parsing failed: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/jobs")
+def save_job(payload: dict, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    """Saves a parsed job requirement to the database."""
+    data = payload.get("data", {})
+    job = JobRequirement(
+        title=data.get("title", "Untitled"),
+        description=data.get("description"),
+        required_skills=json.dumps(data.get("required_skills", [])),
+        nice_to_have_skills=json.dumps(data.get("nice_to_have_skills", [])),
+        experience_years=data.get("experience_years"),
+        location=data.get("location"),
+        remote=str(data.get("remote")).lower() if data.get("remote") is not None else None,
+        raw_email=payload.get("raw_email"),
+    )
+    db.add(job)
+    db.commit()
+    db.refresh(job)
+    return {"status": "success", "id": job.id}
+
+@app.get("/api/jobs")
+def list_jobs(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    """Lists all job requirements."""
+    jobs = db.query(JobRequirement).order_by(JobRequirement.created_at.desc()).all()
+    return [_job_to_dict(j) for j in jobs]
+
+@app.get("/api/jobs/{job_id}")
+def get_job(job_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    """Gets a single job requirement."""
+    job = db.query(JobRequirement).filter(JobRequirement.id == job_id).first()
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return _job_to_dict(job)
+
+@app.patch("/api/jobs/{job_id}/status")
+def update_job_status(job_id: int, payload: dict, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    """Updates the status of a job requirement."""
+    valid = {"open", "filled", "cancelled"}
+    new_status = payload.get("status")
+    if new_status not in valid:
+        raise HTTPException(status_code=422, detail=f"Invalid status. Must be one of: {sorted(valid)}")
+    job = db.query(JobRequirement).filter(JobRequirement.id == job_id).first()
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    job.status = new_status
+    db.commit()
+    return {"id": job_id, "status": new_status}
+
+@app.delete("/api/jobs/{job_id}")
+def delete_job(job_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    """Deletes a job requirement."""
+    job = db.query(JobRequirement).filter(JobRequirement.id == job_id).first()
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    db.delete(job)
+    db.commit()
+    return {"status": "deleted", "id": job_id}
+
+def _job_to_dict(j: JobRequirement) -> dict:
+    return {
+        "id": j.id,
+        "title": j.title,
+        "description": j.description,
+        "required_skills": json.loads(j.required_skills or "[]"),
+        "nice_to_have_skills": json.loads(j.nice_to_have_skills or "[]"),
+        "experience_years": j.experience_years,
+        "location": j.location,
+        "remote": j.remote,
+        "status": j.status or "open",
+        "created_at": j.created_at,
+    }
 
 

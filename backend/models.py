@@ -49,6 +49,22 @@ class Project(Base):
     
     cv_profile = relationship("CVProfile", back_populates="projects")
 
+class JobRequirement(Base):
+    __tablename__ = "job_requirements"
+
+    id = Column(Integer, primary_key=True, index=True)
+    title = Column(String)
+    description = Column(Text, nullable=True)
+    required_skills = Column(Text)   # JSON list
+    nice_to_have_skills = Column(Text, nullable=True)  # JSON list
+    experience_years = Column(Integer, nullable=True)
+    location = Column(String, nullable=True)
+    remote = Column(String, nullable=True)  # "true"/"false"/None
+    status = Column(String, default="open")  # open / filled / cancelled
+    raw_email = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
 class ParsingCache(Base):
     __tablename__ = "parsing_cache"
     

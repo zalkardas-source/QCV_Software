@@ -24,6 +24,7 @@ from docling.datamodel.pipeline_options import PdfPipelineOptions, TableStructur
 from openai import OpenAI
 from pydantic import ValidationError
 from backend.schemas import CVData
+from backend.job_schemas import JobRequirementData
 from backend.config import settings
 
 # Initialize Docling converter globally to cache models
@@ -176,3 +177,66 @@ def structure_cv_data(raw_markdown: str) -> dict:
             logger.exception("[LLM] Unexpected error on attempt %d: %s: %s", attempt + 1, type(e).__name__, e)
             if attempt == max_retries - 1:
                 raise ValueError(f"LLM API error: {type(e).__name__}: {str(e)}")
+
+
+def parse_job_email(email_text: str) -> dict:
+    """Extracts structured job requirements from a client email using the LLM."""
+    client = OpenAI(base_url="https://openrouter.ai/api/v1", api_key=settings.openrouter_api_key)
+    schema_json = JobRequirementData.model_json_schema()
+
+    system_prompt = f"""
+    Return ONLY a valid JSON object matching this schema:
+    {json.dumps(schema_json)}
+
+    RULES:
+    1. TITLE — Extract the exact job title or role the client is looking for.
+    2. DESCRIPTION — Summarize the role in 2-3 sentences. Be factual.
+    3. REQUIRED SKILLS — List only skills explicitly stated as required or mandatory.
+    4. NICE TO HAVE — List skills mentioned as optional, preferred, or beneficial.
+    5. EXPERIENCE — Extract the minimum years of experience as an integer. Null if not mentioned.
+    6. LOCATION — City or region. Null if not mentioned.
+    7. REMOTE — true if remote is explicitly offered, false if explicitly on-site only, null if unclear.
+    8. FORMAT — No preamble, no markdown fences, raw JSON only.
+    """
+
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": f"Client email:\n{email_text}"}
+    ]
+
+    max_retries = 3
+    for attempt in range(max_retries):
+        text_content = None
+        try:
+            logger.info("[JOB] Extraction attempt %d/%d", attempt + 1, max_retries)
+            response = client.chat.completions.create(
+                model="minimax/minimax-m2.7",
+                messages=messages,
+                temperature=0.1,
+            )
+            if not response.choices or not response.choices[0].message.content:
+                raise ValueError("LLM returned an empty response.")
+
+            text_content = response.choices[0].message.content.strip()
+            if text_content.startswith("```json"):
+                text_content = text_content[7:-3].strip()
+            elif text_content.startswith("```"):
+                text_content = text_content[3:-3].strip()
+
+            parsed_json = json.loads(text_content)
+            validated = JobRequirementData(**parsed_json)
+            logger.info("[JOB] Extraction successful.")
+            return validated.model_dump()
+
+        except (json.JSONDecodeError, ValidationError) as e:
+            logger.warning("[JOB] Validation failed on attempt %d: %s", attempt + 1, e)
+            if attempt == max_retries - 1:
+                raise ValueError(f"Failed to extract job data after {max_retries} attempts: {e}")
+            if text_content:
+                messages.append({"role": "assistant", "content": text_content})
+            messages.append({"role": "user", "content": f"Fix the JSON. Error: {e}"})
+
+        except Exception as e:
+            logger.exception("[JOB] Unexpected error on attempt %d", attempt + 1)
+            if attempt == max_retries - 1:
+                raise ValueError(f"LLM API error: {e}")

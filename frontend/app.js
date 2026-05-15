@@ -728,6 +728,24 @@ function closeJobModal() {
     currentJobId = null;
 }
 
+// Score-color thresholds (single source of truth)
+const SCORE_THRESHOLDS = {
+    high:   { min: 70, classes: 'bg-green-50 text-green-700 border-green-200' },
+    medium: { min: 40, classes: 'bg-amber-50 text-amber-700 border-amber-200' },
+    low:    { min: 0,  classes: 'bg-red-50 text-red-500 border-red-200' },
+};
+
+function scoreClasses(score) {
+    if (score >= SCORE_THRESHOLDS.high.min) return SCORE_THRESHOLDS.high.classes;
+    if (score >= SCORE_THRESHOLDS.medium.min) return SCORE_THRESHOLDS.medium.classes;
+    return SCORE_THRESHOLDS.low.classes;
+}
+
+// Match filter state (per-modal-open)
+let lastMatchResults = [];
+let matchStatusFilters = new Set();
+let matchMinScore = 0;
+
 async function viewJob(id) {
     try {
         const response = await apiFetch(`/jobs/${id}`);
@@ -749,8 +767,21 @@ async function viewJob(id) {
             `<span class="bg-slate-100 text-slate-600 text-xs font-medium px-2 py-0.5 rounded-full">${s}</span>`
         ).join('');
 
+        // Reset filter state for the new modal
+        matchStatusFilters = new Set();
+        matchMinScore = 0;
+        document.getElementById('matchMinScore').value = 0;
+        document.getElementById('matchMinScoreValue').textContent = '0%';
+        document.querySelectorAll('.match-status-btn').forEach(b => {
+            b.classList.remove('bg-brand-blue', 'text-white', 'border-brand-blue');
+            b.classList.add('text-slate-600', 'border-slate-300');
+        });
+        document.getElementById('matchFilters').classList.add('hidden');
         document.getElementById('matchResults').innerHTML = '';
         document.getElementById('jobModal').classList.remove('hidden');
+
+        // Auto-load matches
+        matchCandidates();
     } catch (err) {
         alert('Error loading job: ' + err.message);
     }
@@ -764,56 +795,112 @@ async function matchCandidates() {
 
     try {
         const response = await apiFetch(`/jobs/${currentJobId}/matches`);
-        const results = await response.json();
-        const container = document.getElementById('matchResults');
+        lastMatchResults = await response.json();
 
-        if (!results.length) {
-            container.innerHTML = '<p class="text-sm text-slate-400 text-center py-4">No candidates in database yet.</p>';
+        if (!lastMatchResults.length) {
+            document.getElementById('matchResults').innerHTML =
+                '<p class="text-sm text-slate-400 text-center py-4">No candidates in database yet.</p>';
+            document.getElementById('matchFilters').classList.add('hidden');
             return;
         }
-
-        container.innerHTML = results.map(c => {
-            const scoreClass = c.score >= 70 ? 'bg-green-50 text-green-700 border-green-200' :
-                               c.score >= 40 ? 'bg-amber-50 text-amber-700 border-amber-200' :
-                                              'bg-red-50 text-red-500 border-red-200';
-            const label = s => s.replace(/\s*\(.*?\)/g, '').trim();
-            const matched = c.matched_required.map(s =>
-                `<span class="bg-green-50 text-green-700 text-xs px-1.5 py-0.5 rounded border border-green-200">${label(s)}</span>`
-            ).join('');
-            const missing = c.missing_required.map(s =>
-                `<span class="bg-red-50 text-red-500 text-xs px-1.5 py-0.5 rounded border border-red-200 line-through">${label(s)}</span>`
-            ).join('');
-            const nice = c.matched_nice.map(s =>
-                `<span class="bg-blue-50 text-blue-600 text-xs px-1.5 py-0.5 rounded border border-blue-100">${label(s)}</span>`
-            ).join('');
-
-            return `
-            <div class="border border-slate-200 rounded-xl p-4 mb-3 flex items-start gap-4 hover:bg-slate-50/60 transition-colors">
-                <div class="flex-shrink-0 w-14 h-14 rounded-lg border-2 flex flex-col items-center justify-center font-bold text-xl leading-none ${scoreClass}">
-                    ${c.score}<span class="text-[10px] font-normal leading-tight">%</span>
-                </div>
-                <div class="flex-1 min-w-0">
-                    <div class="flex items-center justify-between mb-2">
-                        <div>
-                            <span class="font-semibold text-slate-800">${c.name || 'Unknown'}</span>
-                            <span class="text-xs text-slate-400 ml-2">${c.email || ''}</span>
-                        </div>
-                        <button onclick="previewCandidate(${c.id})"
-                            class="p-1.5 rounded hover:bg-brand-light text-slate-400 hover:text-brand-blue transition-colors flex-shrink-0" title="Kandidat anzeigen">
-                            <i class="fa-solid fa-eye text-sm"></i>
-                        </button>
-                    </div>
-                    <div class="flex flex-wrap gap-1.5">${matched}${missing}${nice}</div>
-                </div>
-            </div>`;
-        }).join('');
+        document.getElementById('matchFilters').classList.remove('hidden');
+        renderMatchResults();
     } catch (err) {
         document.getElementById('matchResults').innerHTML = `<p class="text-sm text-red-400 py-2">Error: ${err.message}</p>`;
     } finally {
         btn.disabled = false;
-        btn.innerHTML = '<i class="fa-solid fa-ranking-star"></i> Match Candidates';
+        btn.innerHTML = '<i class="fa-solid fa-arrows-rotate"></i> Refresh';
     }
 }
+
+function renderMatchResults() {
+    const container = document.getElementById('matchResults');
+    const filtered = lastMatchResults.filter(c => {
+        if (c.score < matchMinScore) return false;
+        if (matchStatusFilters.size > 0 && !matchStatusFilters.has(c.status)) return false;
+        return true;
+    });
+
+    document.getElementById('matchResultsCount').textContent =
+        `${filtered.length} / ${lastMatchResults.length} shown`;
+
+    if (!filtered.length) {
+        container.innerHTML = '<p class="text-sm text-slate-400 text-center py-4">No candidates match the current filters.</p>';
+        return;
+    }
+
+    const stripParen = s => s.replace(/\s*\(.*?\)/g, '').trim();
+
+    container.innerHTML = filtered.map(c => {
+        const sc = scoreClasses(c.score);
+        const matched = c.matched_required.map(s =>
+            `<span class="bg-green-50 text-green-700 text-xs px-1.5 py-0.5 rounded border border-green-200">${stripParen(s)}</span>`
+        ).join('');
+        const missing = c.missing_required.map(s =>
+            `<span class="bg-red-50 text-red-500 text-xs px-1.5 py-0.5 rounded border border-red-200 line-through">${stripParen(s)}</span>`
+        ).join('');
+        const nice = c.matched_nice.map(s =>
+            `<span class="bg-blue-50 text-blue-600 text-xs px-1.5 py-0.5 rounded border border-blue-100">${stripParen(s)}</span>`
+        ).join('');
+
+        // Component-score breakdown row
+        const parts = [`Skills: <strong>${c.skills_score}%</strong>`];
+        if (c.experience_score !== null && c.experience_score !== undefined) {
+            parts.push(`Experience: <strong>${c.experience_score}%</strong>`);
+        }
+        if (c.location_score !== null && c.location_score !== undefined) {
+            parts.push(`Location: <strong>${c.location_score}%</strong>`);
+        }
+        const breakdown = parts.join(' · ');
+
+        return `
+        <div class="border border-slate-200 rounded-xl p-4 mb-3 flex items-start gap-4 hover:bg-slate-50/60 transition-colors">
+            <div class="flex-shrink-0 w-14 h-14 rounded-lg border-2 flex flex-col items-center justify-center font-bold text-xl leading-none ${sc}">
+                ${c.score}<span class="text-[10px] font-normal leading-tight">%</span>
+            </div>
+            <div class="flex-1 min-w-0">
+                <div class="flex items-center justify-between mb-1">
+                    <div>
+                        <span class="font-semibold text-slate-800">${c.name || 'Unknown'}</span>
+                        <span class="text-xs text-slate-400 ml-2">${c.email || ''}</span>
+                    </div>
+                    <button onclick="previewCandidate(${c.id})"
+                        class="p-1.5 rounded hover:bg-brand-light text-slate-400 hover:text-brand-blue transition-colors flex-shrink-0" title="Kandidat anzeigen">
+                        <i class="fa-solid fa-eye text-sm"></i>
+                    </button>
+                </div>
+                <div class="text-[11px] text-slate-500 mb-2">${breakdown}</div>
+                <div class="flex flex-wrap gap-1.5">${matched}${missing}${nice}</div>
+            </div>
+        </div>`;
+    }).join('');
+}
+
+function toggleMatchStatusFilter(status) {
+    const btn = document.querySelector(`.match-status-btn[data-status="${status}"]`);
+    if (matchStatusFilters.has(status)) {
+        matchStatusFilters.delete(status);
+        btn.classList.remove('bg-brand-blue', 'text-white', 'border-brand-blue');
+        btn.classList.add('text-slate-600', 'border-slate-300');
+    } else {
+        matchStatusFilters.add(status);
+        btn.classList.add('bg-brand-blue', 'text-white', 'border-brand-blue');
+        btn.classList.remove('text-slate-600', 'border-slate-300');
+    }
+    renderMatchResults();
+}
+
+// Min-score slider listener (attached once at load)
+document.addEventListener('DOMContentLoaded', () => {
+    const slider = document.getElementById('matchMinScore');
+    if (slider) {
+        slider.addEventListener('input', (e) => {
+            matchMinScore = parseInt(e.target.value, 10);
+            document.getElementById('matchMinScoreValue').textContent = `${matchMinScore}%`;
+            renderMatchResults();
+        });
+    }
+});
 
 let activeFilter = 'all';
 

@@ -32,5 +32,6 @@ class CVData(BaseModel):
     """
     personal_information: PersonalInformation = Field(description="Core personal details")
     small_summary: Optional[str] = Field(default=None, description="A short professional summary or objective of the candidate")
+    total_experience_years: Optional[int] = Field(default=None, description="Total years of professional work experience, computed by summing project durations. Null if not derivable.")
     skill_matrix: List[SkillGroup] = Field(default_factory=list, description="Categorized list of skills")
     projects: List[Project] = Field(default_factory=list, description="List of work experiences or projects")

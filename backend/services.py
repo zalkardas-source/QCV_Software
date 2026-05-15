@@ -115,7 +115,16 @@ def structure_cv_data(raw_markdown: str) -> dict:
 
     4. EXPERIENCE — Extract every job and project. Keep descriptions in the original language.
 
-    5. FORMAT — No preamble, no markdown fences, raw JSON only.
+    5. TOTAL EXPERIENCE — Compute `total_experience_years` as the SUM of all project/job durations
+       in years (integer, rounded to nearest). Handle overlapping roles by counting each
+       calendar year only once. Date format examples:
+       - "2020-2023" → 3 years
+       - "Jan 2020 - Dec 2022" → 3 years
+       - "2020-present" → use 2026 as the current year
+       - "6 months" → 0 (round down) or 1 (round up); prefer the closest integer
+       Null if no durations are available.
+
+    6. FORMAT — No preamble, no markdown fences, raw JSON only.
     """
     
     logger.debug("Raw CV markdown (first 500 chars):\n%s", raw_markdown[:500])

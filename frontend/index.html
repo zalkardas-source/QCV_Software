@@ -53,6 +53,33 @@
                 <button id="navDashboardBtn" class="text-slate-600 hover:text-brand-blue font-medium transition-colors flex items-center gap-1.5"><i class="fa-solid fa-house text-xs"></i> Startseite</button>
                 <button id="navUploadBtn" class="text-slate-600 hover:text-brand-blue font-medium transition-colors flex items-center gap-1.5"><i class="fa-solid fa-file-arrow-up text-xs"></i> CV Parser</button>
                 <button id="navJobsBtn" class="text-slate-600 hover:text-brand-blue font-medium transition-colors flex items-center gap-1.5"><i class="fa-solid fa-briefcase text-xs"></i> Jobs</button>
+                <div class="relative">
+                    <button id="inboxStatusBtn" onclick="toggleInboxPanel()" class="text-slate-600 hover:text-brand-blue font-medium transition-colors flex items-center gap-1.5">
+                        <i class="fa-solid fa-inbox text-xs"></i> Inbox
+                        <span id="inboxStatusDot" class="w-2 h-2 rounded-full bg-slate-300"></span>
+                    </button>
+                    <div id="inboxPanel" class="hidden absolute right-0 mt-2 w-72 bg-white rounded-xl shadow-xl border border-slate-200 p-4 z-50">
+                        <div id="inboxNotConnected" class="hidden">
+                            <p class="text-sm text-slate-600 mb-3">Verbinde dein Outlook-Postfach, um eingehende Anfragen automatisch verarbeiten zu lassen.</p>
+                            <button onclick="connectOutlook()" class="w-full bg-[#0078d4] hover:bg-[#106ebe] text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2">
+                                <i class="fa-brands fa-microsoft"></i> Outlook verbinden
+                            </button>
+                            <p id="inboxNotConfigured" class="hidden mt-3 text-xs text-red-500">Backend ist nicht konfiguriert. <code>MICROSOFT_CLIENT_ID/SECRET</code> in <code>.env</code> setzen.</p>
+                        </div>
+                        <div id="inboxConnected" class="hidden">
+                            <div class="flex items-start gap-2 mb-3">
+                                <i class="fa-brands fa-microsoft text-[#0078d4] mt-0.5"></i>
+                                <div class="flex-1 min-w-0">
+                                    <div class="text-xs text-slate-400 uppercase font-semibold">Connected</div>
+                                    <div id="inboxConnectedEmail" class="text-sm font-medium text-slate-800 break-all"></div>
+                                </div>
+                            </div>
+                            <button onclick="disconnectOutlook()" class="w-full bg-slate-100 hover:bg-red-50 hover:text-red-600 text-slate-600 px-4 py-2 rounded-lg text-sm font-medium transition-colors">
+                                Trennen
+                            </button>
+                        </div>
+                    </div>
+                </div>
                 <div class="h-6 w-px bg-slate-200 mx-1"></div>
                 <button id="btnLogout" class="text-slate-400 hover:text-red-500 transition-colors flex items-center gap-1.5 font-medium" title="Logout">
                     <span class="text-xs hidden sm:inline">Logout</span>

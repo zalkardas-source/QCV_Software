@@ -10,5 +10,6 @@ python-pptx
 docling
 openai
 python-dotenv
+msal
 requests
 beautifulsoup4

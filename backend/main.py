@@ -24,10 +24,11 @@ import os
 load_dotenv()
 
 from backend.database import engine, Base, get_db, SessionLocal
-from backend.models import User, CVProfile, Skill, Project, JobRequirement
+from backend.models import User, CVProfile, Skill, Project, JobRequirement, OAuthAccount
 from backend.services import extract_text_from_file, structure_cv_data, warmup_docling, parse_job_email
 from backend.scraping import fetch_url, detect_source
 from backend.export_pptx import create_pptx_summary
+from backend import oauth_microsoft, crypto
 
 # Initialize DB tables
 Base.metadata.create_all(bind=engine)
@@ -518,5 +519,145 @@ def match_jobs_for_candidate(cv_id: int, db: Session = Depends(get_db), user: Us
 
     results.sort(key=lambda x: x["score"], reverse=True)
     return results
+
+
+# ── OAuth / Email Connection ─────────────────────────────────────────────────
+
+from datetime import datetime, timedelta
+import secrets as _secrets
+
+_OAUTH_STATE_TTL_MINUTES = 10
+
+
+def _make_state_token(user_id: int) -> str:
+    """Short-lived JWT that survives the round trip to Microsoft, so the
+    callback knows which logged-in user is connecting and that the request
+    actually originated from us (CSRF protection)."""
+    payload = {
+        "uid": user_id,
+        "nonce": _secrets.token_urlsafe(16),
+        "scope": "oauth_state",
+        "exp": datetime.utcnow() + timedelta(minutes=_OAUTH_STATE_TTL_MINUTES),
+    }
+    return jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
+
+
+def _decode_state_token(token: str) -> int:
+    try:
+        payload = jwt.decode(token, settings.jwt_secret, algorithms=[settings.jwt_algorithm])
+    except JWTError:
+        raise HTTPException(status_code=400, detail="Invalid or expired OAuth state")
+    if payload.get("scope") != "oauth_state":
+        raise HTTPException(status_code=400, detail="Token scope mismatch")
+    return int(payload["uid"])
+
+
+@app.get("/api/oauth/microsoft/authorize")
+def oauth_microsoft_authorize(user: User = Depends(get_current_user)):
+    """Returns the Microsoft sign-in URL. Frontend redirects the browser to it."""
+    if not oauth_microsoft.is_configured():
+        raise HTTPException(
+            status_code=503,
+            detail="Microsoft OAuth not configured on this server. Set MICROSOFT_CLIENT_ID/SECRET in .env.",
+        )
+    state = _make_state_token(user.id)
+    url = oauth_microsoft.build_authorize_url(state=state)
+    return {"url": url}
+
+
+@app.get("/api/oauth/microsoft/callback")
+async def oauth_microsoft_callback(
+    code: str | None = None,
+    state: str | None = None,
+    error: str | None = None,
+    error_description: str | None = None,
+    db: Session = Depends(get_db),
+):
+    """Handles the Microsoft redirect after the user signs in.
+
+    On success: stores the (encrypted) refresh token and redirects the user
+    back to the frontend with `?connected=microsoft`. On failure: redirects
+    with `?oauth_error=<msg>`.
+    """
+    frontend_url = "/frontend/index.html"
+
+    if error:
+        msg = error_description or error
+        return RedirectResponse(url=f"{frontend_url}?oauth_error={msg}")
+    if not code or not state:
+        return RedirectResponse(url=f"{frontend_url}?oauth_error=Missing+code+or+state")
+
+    try:
+        user_id = _decode_state_token(state)
+    except HTTPException as e:
+        return RedirectResponse(url=f"{frontend_url}?oauth_error={e.detail}")
+
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        return RedirectResponse(url=f"{frontend_url}?oauth_error=Unknown+user")
+
+    try:
+        tokens = await anyio.to_thread.run_sync(oauth_microsoft.exchange_code_for_tokens, code)
+    except ValueError as e:
+        logger.warning("OAuth exchange failed: %s", e)
+        return RedirectResponse(url=f"{frontend_url}?oauth_error={e}")
+    except Exception:
+        logger.exception("Unexpected error during OAuth exchange")
+        return RedirectResponse(url=f"{frontend_url}?oauth_error=Unexpected+server+error")
+
+    # Replace any existing connection for this user+provider (re-connect flow)
+    existing = (
+        db.query(OAuthAccount)
+        .filter(OAuthAccount.user_id == user.id, OAuthAccount.provider == "microsoft")
+        .first()
+    )
+    if existing:
+        db.delete(existing)
+
+    account = OAuthAccount(
+        user_id=user.id,
+        provider="microsoft",
+        email_address=tokens["email_address"],
+        refresh_token_encrypted=crypto.encrypt(tokens["refresh_token"]),
+        scopes=tokens["scopes"],
+    )
+    db.add(account)
+    db.commit()
+
+    return RedirectResponse(url=f"{frontend_url}?connected=microsoft")
+
+
+@app.get("/api/oauth/status")
+def oauth_status(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    """Returns which email providers the current user has connected."""
+    accounts = (
+        db.query(OAuthAccount).filter(OAuthAccount.user_id == user.id).all()
+    )
+    by_provider = {
+        a.provider: {
+            "connected": True,
+            "email": a.email_address,
+            "connected_at": a.connected_at,
+        }
+        for a in accounts
+    }
+    return {
+        "microsoft": by_provider.get("microsoft", {"connected": False, "configured": oauth_microsoft.is_configured()}),
+    }
+
+
+@app.post("/api/oauth/microsoft/disconnect")
+def oauth_microsoft_disconnect(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    """Removes the stored Microsoft OAuth connection for the current user."""
+    account = (
+        db.query(OAuthAccount)
+        .filter(OAuthAccount.user_id == user.id, OAuthAccount.provider == "microsoft")
+        .first()
+    )
+    if not account:
+        raise HTTPException(status_code=404, detail="No Microsoft account connected")
+    db.delete(account)
+    db.commit()
+    return {"status": "disconnected"}
 
 

@@ -26,6 +26,7 @@ load_dotenv()
 from backend.database import engine, Base, get_db, SessionLocal
 from backend.models import User, CVProfile, Skill, Project, JobRequirement
 from backend.services import extract_text_from_file, structure_cv_data, warmup_docling, parse_job_email
+from backend.scraping import fetch_url, detect_source
 from backend.export_pptx import create_pptx_summary
 
 # Initialize DB tables
@@ -148,6 +149,47 @@ async def parse_cv(
     except Exception as e:
         logger.error("Fatal error in parse_cv", exc_info=True)
         raise HTTPException(status_code=500, detail=f"{str(e)}")
+
+@app.post("/api/cvs/import-from-url")
+async def import_cv_from_url(payload: dict, user: User = Depends(get_current_user)):
+    """Imports a CV from a profile URL (LinkedIn/Xing/Freelancermap) or pasted text.
+
+    Body: { "url": str?, "text": str? } — at least one is required.
+    URL is tried first; if not present, falls back to text.
+    """
+    url = (payload.get("url") or "").strip()
+    text = (payload.get("text") or "").strip()
+
+    if not url and not text:
+        raise HTTPException(status_code=422, detail="Either 'url' or 'text' is required")
+
+    source = detect_source(url) if url else None
+
+    try:
+        if text:
+            raw_text = text
+        else:
+            raw_text = await anyio.to_thread.run_sync(fetch_url, url)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.exception("URL fetch failed")
+        raise HTTPException(status_code=500, detail=f"Fetch failed: {e}")
+
+    try:
+        structured_data = await anyio.to_thread.run_sync(structure_cv_data, raw_text)
+    except Exception as e:
+        logger.exception("LLM structuring failed for URL import")
+        raise HTTPException(status_code=500, detail=f"Parsing failed: {e}")
+
+    filename = f"{source or 'profile'}_{url[-40:] if url else 'pasted'}.html"
+    return {
+        "status": "success",
+        "filename": filename,
+        "source": source,
+        "data": structured_data,
+    }
+
 
 @app.post("/api/save-cv")
 def save_cv(payload: dict, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
@@ -397,90 +439,7 @@ def _job_to_dict(j: JobRequirement) -> dict:
 
 # ── CV Matching ───────────────────────────────────────────────────────────────
 
-# Normalizes common German↔English skill name variations so matching works
-# regardless of the CV's language.
-_SKILL_ALIASES: dict[str, str] = {
-    # Languages
-    "englisch": "english", "deutsch": "german", "französisch": "french",
-    "spanisch": "spanish", "italienisch": "italian", "russisch": "russian",
-    "chinesisch": "chinese", "japanisch": "japanese", "arabisch": "arabic",
-    "portugiesisch": "portuguese", "niederländisch": "dutch", "türkisch": "turkish",
-    "polnisch": "polish", "schwedisch": "swedish", "dänisch": "danish",
-    "norwegisch": "norwegian", "finnisch": "finnish", "koreanisch": "korean",
-    # MS Office variants
-    "microsoft excel": "excel", "ms excel": "excel",
-    "microsoft word": "word", "ms word": "word",
-    "microsoft powerpoint": "powerpoint", "ms powerpoint": "powerpoint",
-    "microsoft office": "ms office", "microsoft 365": "ms office",
-    # Common synonyms
-    "javascript": "js", "js": "javascript",
-    "typescript": "ts", "ts": "typescript",
-    "node.js": "nodejs", "nodejs": "node.js",
-    "react.js": "react", "vue.js": "vue", "angular.js": "angular",
-    "postgresql": "postgres", "postgres": "postgresql",
-}
-
-def _normalize(name: str) -> str:
-    n = name.lower().strip()
-    return _SKILL_ALIASES.get(n, n)
-
-
-def _match_score(candidate_skills: list, required: list, nice: list) -> dict:
-    """Scores a candidate's skills against job requirements. No LLM needed."""
-    # Build normalized skill map: both the original and normalized name point to the same rating
-    skill_map: dict[str, int] = {}
-    for s in candidate_skills:
-        raw_name = s.get("skill", "").lower().strip()
-        if not raw_name:
-            continue
-        rating = s.get("rating", 4)
-        skill_map[raw_name] = rating
-        norm = _normalize(raw_name)
-        if norm != raw_name:
-            skill_map[norm] = rating
-        # Also add the reverse alias so "english" maps when CV says "englisch"
-        for alias_from, alias_to in _SKILL_ALIASES.items():
-            if raw_name == alias_to and alias_from not in skill_map:
-                skill_map[alias_from] = rating
-
-    def find(job_skill: str) -> int | None:
-        needle = _normalize(job_skill.lower().strip())
-        # 1. Exact match (after normalization)
-        if needle in skill_map:
-            return skill_map[needle]
-        # 2. Substring match
-        for k, v in skill_map.items():
-            if needle in k or k in needle:
-                return v
-        return None
-
-    total_weight = len(required) * 1.0 + len(nice) * 0.5
-    if total_weight == 0:
-        return {"score": 0, "matched_required": [], "missing_required": [], "matched_nice": []}
-
-    score = 0.0
-    matched_required, missing_required, matched_nice = [], [], []
-
-    for skill in required:
-        rating = find(skill)
-        if rating is not None:
-            score += (rating / 10) * 1.0
-            matched_required.append(skill)
-        else:
-            missing_required.append(skill)
-
-    for skill in nice:
-        rating = find(skill)
-        if rating is not None:
-            score += (rating / 10) * 0.5
-            matched_nice.append(skill)
-
-    return {
-        "score": round((score / total_weight) * 100),
-        "matched_required": matched_required,
-        "missing_required": missing_required,
-        "matched_nice": matched_nice,
-    }
+from backend.matching import match_score
 
 
 @app.get("/api/jobs/{job_id}/matches")
@@ -493,7 +452,7 @@ def match_candidates(job_id: int, db: Session = Depends(get_db), user: User = De
     required = json.loads(job.required_skills or "[]")
     nice = json.loads(job.nice_to_have_skills or "[]")
 
-    profiles = db.query(CVProfile).all()
+    profiles = db.query(CVProfile).filter(CVProfile.status != "rejected").all()
     results = []
     for p in profiles:
         raw = json.loads(p.raw_json or "{}") if p.raw_json else {}
@@ -501,12 +460,59 @@ def match_candidates(job_id: int, db: Session = Depends(get_db), user: User = De
             s for group in raw.get("skill_matrix", [])
             for s in group.get("skills", [])
         ]
-        match = _match_score(candidate_skills, required, nice)
+        match = match_score(
+            candidate_skills, required, nice,
+            candidate_years=raw.get("total_experience_years"),
+            required_years=job.experience_years,
+            candidate_location=p.location,
+            job_location=job.location,
+            job_remote=job.remote,
+        )
         results.append({
             "id": p.id,
             "name": p.name,
             "email": p.email,
             "status": p.status or "new",
+            **match,
+        })
+
+    results.sort(key=lambda x: x["score"], reverse=True)
+    return results
+
+
+@app.get("/api/cvs/{cv_id}/matches")
+def match_jobs_for_candidate(cv_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    """Reverse matching: for a given CV, returns all OPEN jobs scored against this candidate."""
+    profile = db.query(CVProfile).filter(CVProfile.id == cv_id).first()
+    if not profile:
+        raise HTTPException(status_code=404, detail="CV not found")
+
+    raw = json.loads(profile.raw_json or "{}") if profile.raw_json else {}
+    candidate_skills = [
+        s for group in raw.get("skill_matrix", [])
+        for s in group.get("skills", [])
+    ]
+    candidate_years = raw.get("total_experience_years")
+
+    jobs = db.query(JobRequirement).filter(JobRequirement.status == "open").all()
+    results = []
+    for j in jobs:
+        required = json.loads(j.required_skills or "[]")
+        nice = json.loads(j.nice_to_have_skills or "[]")
+        match = match_score(
+            candidate_skills, required, nice,
+            candidate_years=candidate_years,
+            required_years=j.experience_years,
+            candidate_location=profile.location,
+            job_location=j.location,
+            job_remote=j.remote,
+        )
+        results.append({
+            "id": j.id,
+            "title": j.title,
+            "location": j.location,
+            "remote": j.remote,
+            "experience_years": j.experience_years,
             **match,
         })
 

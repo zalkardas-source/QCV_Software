@@ -195,6 +195,48 @@ async function uploadFile(file) {
 
 // Batch processing has been removed.
 
+// ── URL Import (LinkedIn / Xing / Freelancermap) ────────────────────────────
+async function importFromUrl() {
+    const url = document.getElementById('importUrlInput').value.trim();
+    const text = document.getElementById('importTextInput').value.trim();
+
+    if (!url && !text) {
+        alert('Bitte URL eingeben oder Profil-Text einfügen.');
+        return;
+    }
+
+    const btn = document.getElementById('btnImportUrl');
+    const originalHTML = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-spinner spinner mr-1"></i> Importing...';
+
+    showView('loadingView');
+
+    try {
+        const response = await apiFetch('/cvs/import-from-url', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url, text }),
+        });
+
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.detail || 'Import failed');
+
+        currentData = result.data;
+        currentFilename = result.filename;
+
+        showView('resultsView');
+        jsonEditor.value = JSON.stringify(currentData, null, 4);
+        updatePreview(currentData);
+    } catch (err) {
+        alert('Import failed: ' + err.message);
+        showView('uploadView');
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = originalHTML;
+    }
+}
+
 // ── Preview Panel ───────────────────────────────────────────────
 jsonEditor.addEventListener('input', (e) => {
     try {
@@ -411,28 +453,28 @@ function renderDashboardTable(cvs) {
         } catch (e) { console.error("JSON Error", e); }
 
         return `
-        <tr class="border-b border-slate-100 hover:bg-slate-50/80 transition-colors group">
-            <td class="px-5 py-3 text-slate-400 font-mono text-xs">${cv.id}</td>
-            <td class="px-5 py-3">
-                <div class="flex items-center gap-3">
-                    <div class="w-8 h-8 rounded-full bg-brand-light text-brand-blue flex items-center justify-center text-xs font-bold flex-shrink-0">${initials}</div>
-                    <span class="font-semibold text-slate-800">${cv.name || 'Unknown'}</span>
+        <tr class="border-b border-slate-100 hover:bg-slate-50/80 transition-colors">
+            <td class="px-3 py-2.5 text-slate-400 font-mono text-xs">${cv.id}</td>
+            <td class="px-3 py-2.5">
+                <div class="flex items-center gap-2">
+                    <div class="w-7 h-7 rounded-full bg-brand-light text-brand-blue flex items-center justify-center text-xs font-bold flex-shrink-0">${initials}</div>
+                    <span class="font-semibold text-slate-800 text-sm">${cv.name || 'Unknown'}</span>
                 </div>
             </td>
-            <td class="px-5 py-3 text-slate-500">${cv.email || '-'}</td>
-            <td class="px-5 py-3"><span class="bg-slate-100 text-slate-600 px-2 py-0.5 rounded text-xs font-mono">${cv.filename || '-'}</span></td>
-            <td class="px-5 py-3">
-                <span class="px-2 py-1 bg-blue-50 text-blue-600 rounded-full text-xs font-bold border border-blue-100">
+            <td class="px-3 py-2.5 text-slate-500 text-xs max-w-[160px]"><span class="block truncate" title="${cv.email || ''}">${cv.email || '-'}</span></td>
+            <td class="px-3 py-2.5 max-w-[120px]"><span class="bg-slate-100 text-slate-600 px-2 py-0.5 rounded text-xs font-mono block truncate" title="${cv.filename || ''}">${cv.filename || '-'}</span></td>
+            <td class="px-3 py-2.5">
+                <span class="px-2 py-1 bg-blue-50 text-blue-600 rounded-full text-xs font-bold border border-blue-100 whitespace-nowrap">
                     ${skillCount} Skills
                 </span>
             </td>
-            <td class="px-5 py-3">${renderStatusSelect(cv.id, cv.status || 'new')}</td>
-            <td class="px-5 py-3 text-slate-500">${date}</td>
-            <td class="px-5 py-3 text-right">
-                <div class="flex items-center justify-end gap-1 opacity-60 group-hover:opacity-100 transition-opacity">
-                    <button onclick="viewCV(${cv.id})" class="p-1.5 rounded hover:bg-brand-light text-slate-500 hover:text-brand-blue transition-colors"><i class="fa-solid fa-eye text-sm"></i></button>
-                    <button onclick="downloadCVPPTX(${cv.id})" class="p-1.5 rounded hover:bg-green-50 text-slate-500 hover:text-green-600 transition-colors"><i class="fa-solid fa-file-powerpoint text-sm"></i></button>
-                    <button onclick="deleteCV(${cv.id})" class="p-1.5 rounded hover:bg-red-50 text-slate-500 hover:text-red-500 transition-colors"><i class="fa-solid fa-trash-can text-sm"></i></button>
+            <td class="px-3 py-2.5">${renderStatusSelect(cv.id, cv.status || 'new')}</td>
+            <td class="px-3 py-2.5 text-slate-500 text-xs whitespace-nowrap">${date}</td>
+            <td class="px-3 py-2.5 text-right">
+                <div class="flex items-center justify-end gap-1">
+                    <button onclick="previewCandidate(${cv.id})" class="p-1.5 rounded hover:bg-brand-light text-slate-400 hover:text-brand-blue transition-colors" title="Anzeigen"><i class="fa-solid fa-eye text-sm"></i></button>
+                    <button onclick="downloadCVPPTX(${cv.id})" class="p-1.5 rounded hover:bg-green-50 text-slate-400 hover:text-green-600 transition-colors" title="PPTX"><i class="fa-solid fa-file-powerpoint text-sm"></i></button>
+                    <button onclick="deleteCV(${cv.id})" class="p-1.5 rounded hover:bg-red-50 text-slate-400 hover:text-red-500 transition-colors" title="Löschen"><i class="fa-solid fa-trash-can text-sm"></i></button>
                 </div>
             </td>
         </tr>`;
@@ -642,6 +684,83 @@ async function deleteJob(id) {
     } catch (err) { alert(err.message); }
 }
 
+// ── Candidate Detail Modal ───────────────────────────────────────────────────
+
+let currentCandidateId = null;
+
+function closeCandidateModal() {
+    document.getElementById('candidateModal').classList.add('hidden');
+    currentCandidateId = null;
+}
+
+async function previewCandidate(id) {
+    currentCandidateId = id;
+    try {
+        const response = await apiFetch(`/cvs/${id}`);
+        const cv = await response.json();
+        const data = cv.data || {};
+        const personal = data.personal_information || {};
+
+        const name = personal.full_name || 'Unknown';
+        const initials = name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+        document.getElementById('candidateModalAvatar').textContent = initials;
+        document.getElementById('candidateModalName').textContent = name;
+        document.getElementById('candidateModalEmail').textContent = personal.email || '';
+        document.getElementById('candidateModalLocation').textContent = personal.location ? `📍 ${personal.location}` : '';
+        document.getElementById('candidateModalSummary').textContent = data.small_summary || '';
+
+        document.getElementById('candidateModalEditBtn').onclick = () => {
+            closeCandidateModal();
+            currentData = data;
+            currentFilename = cv.filename;
+            showView('resultsView');
+            jsonEditor.value = JSON.stringify(data, null, 4);
+            updatePreview(data);
+        };
+
+        const skillsContainer = document.getElementById('candidateModalSkills');
+        skillsContainer.innerHTML = '';
+        (data.skill_matrix || []).forEach(group => {
+            const section = document.createElement('div');
+            const header = document.createElement('div');
+            header.className = 'text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2';
+            header.textContent = group.category || 'General';
+            section.appendChild(header);
+            (group.skills || []).forEach(s => {
+                const r = Math.min(10, Math.max(0, parseInt(s.rating) || 5));
+                const pct = (r / 10) * 100;
+                const color = r >= 8 ? '#22c55e' : r >= 5 ? '#f59e0b' : '#ef4444';
+                const row = document.createElement('div');
+                row.className = 'flex items-center gap-2 py-0.5';
+                row.innerHTML = `
+                    <span class="text-xs text-slate-700 w-40 shrink-0 truncate">${s.skill}</span>
+                    <div class="flex-1 bg-slate-200 rounded-full h-1.5 overflow-hidden">
+                        <div style="width:${pct}%;background:${color}" class="h-full rounded-full"></div>
+                    </div>
+                    <span class="text-xs font-bold w-5 text-right shrink-0" style="color:${color}">${r}</span>`;
+                section.appendChild(row);
+            });
+            skillsContainer.appendChild(section);
+        });
+
+        const projectsContainer = document.getElementById('candidateModalProjects');
+        projectsContainer.innerHTML = '';
+        (data.projects || []).forEach(p => {
+            const div = document.createElement('div');
+            div.className = 'border-l-2 border-brand-blue pl-3 py-0.5';
+            div.innerHTML = `
+                <div class="text-sm font-bold text-slate-900">${p.name || 'Unnamed'}</div>
+                <div class="text-xs text-slate-400 mb-1">${p.duration || ''}</div>
+                <div class="text-xs text-slate-600 line-clamp-3">${p.description || ''}</div>`;
+            projectsContainer.appendChild(div);
+        });
+
+        document.getElementById('candidateModal').classList.remove('hidden');
+    } catch (err) {
+        alert('Error loading candidate: ' + err.message);
+    }
+}
+
 // ── Job Detail Modal & Matching ─────────────────────────────────────────────
 
 let currentJobId = null;
@@ -650,6 +769,24 @@ function closeJobModal() {
     document.getElementById('jobModal').classList.add('hidden');
     currentJobId = null;
 }
+
+// Score-color thresholds (single source of truth)
+const SCORE_THRESHOLDS = {
+    high:   { min: 70, classes: 'bg-green-50 text-green-700 border-green-200' },
+    medium: { min: 40, classes: 'bg-amber-50 text-amber-700 border-amber-200' },
+    low:    { min: 0,  classes: 'bg-red-50 text-red-500 border-red-200' },
+};
+
+function scoreClasses(score) {
+    if (score >= SCORE_THRESHOLDS.high.min) return SCORE_THRESHOLDS.high.classes;
+    if (score >= SCORE_THRESHOLDS.medium.min) return SCORE_THRESHOLDS.medium.classes;
+    return SCORE_THRESHOLDS.low.classes;
+}
+
+// Match filter state (per-modal-open)
+let lastMatchResults = [];
+let matchStatusFilters = new Set();
+let matchMinScore = 0;
 
 async function viewJob(id) {
     try {
@@ -672,8 +809,21 @@ async function viewJob(id) {
             `<span class="bg-slate-100 text-slate-600 text-xs font-medium px-2 py-0.5 rounded-full">${s}</span>`
         ).join('');
 
+        // Reset filter state for the new modal
+        matchStatusFilters = new Set();
+        matchMinScore = 0;
+        document.getElementById('matchMinScore').value = 0;
+        document.getElementById('matchMinScoreValue').textContent = '0%';
+        document.querySelectorAll('.match-status-btn').forEach(b => {
+            b.classList.remove('bg-brand-blue', 'text-white', 'border-brand-blue');
+            b.classList.add('text-slate-600', 'border-slate-300');
+        });
+        document.getElementById('matchFilters').classList.add('hidden');
         document.getElementById('matchResults').innerHTML = '';
         document.getElementById('jobModal').classList.remove('hidden');
+
+        // Auto-load matches
+        matchCandidates();
     } catch (err) {
         alert('Error loading job: ' + err.message);
     }
@@ -687,55 +837,112 @@ async function matchCandidates() {
 
     try {
         const response = await apiFetch(`/jobs/${currentJobId}/matches`);
-        const results = await response.json();
-        const container = document.getElementById('matchResults');
+        lastMatchResults = await response.json();
 
-        if (!results.length) {
-            container.innerHTML = '<p class="text-sm text-slate-400 text-center py-4">No candidates in database yet.</p>';
+        if (!lastMatchResults.length) {
+            document.getElementById('matchResults').innerHTML =
+                '<p class="text-sm text-slate-400 text-center py-4">No candidates in database yet.</p>';
+            document.getElementById('matchFilters').classList.add('hidden');
             return;
         }
-
-        container.innerHTML = results.map(c => {
-            const scoreClass = c.score >= 70 ? 'bg-green-50 text-green-700 border-green-200' :
-                               c.score >= 40 ? 'bg-amber-50 text-amber-700 border-amber-200' :
-                                              'bg-red-50 text-red-500 border-red-200';
-            const matched = c.matched_required.map(s =>
-                `<span class="bg-green-50 text-green-700 text-xs px-1.5 py-0.5 rounded border border-green-200">${s}</span>`
-            ).join('');
-            const missing = c.missing_required.map(s =>
-                `<span class="bg-red-50 text-red-500 text-xs px-1.5 py-0.5 rounded border border-red-200 line-through">${s}</span>`
-            ).join('');
-            const nice = c.matched_nice.map(s =>
-                `<span class="bg-blue-50 text-blue-600 text-xs px-1.5 py-0.5 rounded border border-blue-100">${s}</span>`
-            ).join('');
-
-            return `
-            <div class="border border-slate-200 rounded-xl p-4 mb-3 flex items-start gap-4 hover:bg-slate-50/60 transition-colors">
-                <div class="flex-shrink-0 w-14 h-14 rounded-lg border-2 flex flex-col items-center justify-center font-bold text-xl leading-none ${scoreClass}">
-                    ${c.score}<span class="text-[10px] font-normal leading-tight">%</span>
-                </div>
-                <div class="flex-1 min-w-0">
-                    <div class="flex items-center justify-between mb-2">
-                        <div>
-                            <span class="font-semibold text-slate-800">${c.name || 'Unknown'}</span>
-                            <span class="text-xs text-slate-400 ml-2">${c.email || ''}</span>
-                        </div>
-                        <button onclick="closeJobModal(); viewCV(${c.id})"
-                            class="p-1.5 rounded hover:bg-brand-light text-slate-400 hover:text-brand-blue transition-colors flex-shrink-0" title="Kandidat anzeigen">
-                            <i class="fa-solid fa-eye text-sm"></i>
-                        </button>
-                    </div>
-                    <div class="flex flex-wrap gap-1.5">${matched}${missing}${nice}</div>
-                </div>
-            </div>`;
-        }).join('');
+        document.getElementById('matchFilters').classList.remove('hidden');
+        renderMatchResults();
     } catch (err) {
         document.getElementById('matchResults').innerHTML = `<p class="text-sm text-red-400 py-2">Error: ${err.message}</p>`;
     } finally {
         btn.disabled = false;
-        btn.innerHTML = '<i class="fa-solid fa-ranking-star"></i> Match Candidates';
+        btn.innerHTML = '<i class="fa-solid fa-arrows-rotate"></i> Refresh';
     }
 }
+
+function renderMatchResults() {
+    const container = document.getElementById('matchResults');
+    const filtered = lastMatchResults.filter(c => {
+        if (c.score < matchMinScore) return false;
+        if (matchStatusFilters.size > 0 && !matchStatusFilters.has(c.status)) return false;
+        return true;
+    });
+
+    document.getElementById('matchResultsCount').textContent =
+        `${filtered.length} / ${lastMatchResults.length} shown`;
+
+    if (!filtered.length) {
+        container.innerHTML = '<p class="text-sm text-slate-400 text-center py-4">No candidates match the current filters.</p>';
+        return;
+    }
+
+    const stripParen = s => s.replace(/\s*\(.*?\)/g, '').trim();
+
+    container.innerHTML = filtered.map(c => {
+        const sc = scoreClasses(c.score);
+        const matched = c.matched_required.map(s =>
+            `<span class="bg-green-50 text-green-700 text-xs px-1.5 py-0.5 rounded border border-green-200">${stripParen(s)}</span>`
+        ).join('');
+        const missing = c.missing_required.map(s =>
+            `<span class="bg-red-50 text-red-500 text-xs px-1.5 py-0.5 rounded border border-red-200 line-through">${stripParen(s)}</span>`
+        ).join('');
+        const nice = c.matched_nice.map(s =>
+            `<span class="bg-blue-50 text-blue-600 text-xs px-1.5 py-0.5 rounded border border-blue-100">${stripParen(s)}</span>`
+        ).join('');
+
+        // Component-score breakdown row
+        const parts = [`Skills: <strong>${c.skills_score}%</strong>`];
+        if (c.experience_score !== null && c.experience_score !== undefined) {
+            parts.push(`Experience: <strong>${c.experience_score}%</strong>`);
+        }
+        if (c.location_score !== null && c.location_score !== undefined) {
+            parts.push(`Location: <strong>${c.location_score}%</strong>`);
+        }
+        const breakdown = parts.join(' · ');
+
+        return `
+        <div class="border border-slate-200 rounded-xl p-4 mb-3 flex items-start gap-4 hover:bg-slate-50/60 transition-colors">
+            <div class="flex-shrink-0 w-14 h-14 rounded-lg border-2 flex flex-col items-center justify-center font-bold text-xl leading-none ${sc}">
+                ${c.score}<span class="text-[10px] font-normal leading-tight">%</span>
+            </div>
+            <div class="flex-1 min-w-0">
+                <div class="flex items-center justify-between mb-1">
+                    <div>
+                        <span class="font-semibold text-slate-800">${c.name || 'Unknown'}</span>
+                        <span class="text-xs text-slate-400 ml-2">${c.email || ''}</span>
+                    </div>
+                    <button onclick="previewCandidate(${c.id})"
+                        class="p-1.5 rounded hover:bg-brand-light text-slate-400 hover:text-brand-blue transition-colors flex-shrink-0" title="Kandidat anzeigen">
+                        <i class="fa-solid fa-eye text-sm"></i>
+                    </button>
+                </div>
+                <div class="text-[11px] text-slate-500 mb-2">${breakdown}</div>
+                <div class="flex flex-wrap gap-1.5">${matched}${missing}${nice}</div>
+            </div>
+        </div>`;
+    }).join('');
+}
+
+function toggleMatchStatusFilter(status) {
+    const btn = document.querySelector(`.match-status-btn[data-status="${status}"]`);
+    if (matchStatusFilters.has(status)) {
+        matchStatusFilters.delete(status);
+        btn.classList.remove('bg-brand-blue', 'text-white', 'border-brand-blue');
+        btn.classList.add('text-slate-600', 'border-slate-300');
+    } else {
+        matchStatusFilters.add(status);
+        btn.classList.add('bg-brand-blue', 'text-white', 'border-brand-blue');
+        btn.classList.remove('text-slate-600', 'border-slate-300');
+    }
+    renderMatchResults();
+}
+
+// Min-score slider listener (attached once at load)
+document.addEventListener('DOMContentLoaded', () => {
+    const slider = document.getElementById('matchMinScore');
+    if (slider) {
+        slider.addEventListener('input', (e) => {
+            matchMinScore = parseInt(e.target.value, 10);
+            document.getElementById('matchMinScoreValue').textContent = `${matchMinScore}%`;
+            renderMatchResults();
+        });
+    }
+});
 
 let activeFilter = 'all';
 

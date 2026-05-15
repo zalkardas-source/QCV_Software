@@ -26,6 +26,7 @@ load_dotenv()
 from backend.database import engine, Base, get_db, SessionLocal
 from backend.models import User, CVProfile, Skill, Project, JobRequirement
 from backend.services import extract_text_from_file, structure_cv_data, warmup_docling, parse_job_email
+from backend.scraping import fetch_url, detect_source
 from backend.export_pptx import create_pptx_summary
 
 # Initialize DB tables
@@ -148,6 +149,47 @@ async def parse_cv(
     except Exception as e:
         logger.error("Fatal error in parse_cv", exc_info=True)
         raise HTTPException(status_code=500, detail=f"{str(e)}")
+
+@app.post("/api/cvs/import-from-url")
+async def import_cv_from_url(payload: dict, user: User = Depends(get_current_user)):
+    """Imports a CV from a profile URL (LinkedIn/Xing/Freelancermap) or pasted text.
+
+    Body: { "url": str?, "text": str? } — at least one is required.
+    URL is tried first; if not present, falls back to text.
+    """
+    url = (payload.get("url") or "").strip()
+    text = (payload.get("text") or "").strip()
+
+    if not url and not text:
+        raise HTTPException(status_code=422, detail="Either 'url' or 'text' is required")
+
+    source = detect_source(url) if url else None
+
+    try:
+        if text:
+            raw_text = text
+        else:
+            raw_text = await anyio.to_thread.run_sync(fetch_url, url)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.exception("URL fetch failed")
+        raise HTTPException(status_code=500, detail=f"Fetch failed: {e}")
+
+    try:
+        structured_data = await anyio.to_thread.run_sync(structure_cv_data, raw_text)
+    except Exception as e:
+        logger.exception("LLM structuring failed for URL import")
+        raise HTTPException(status_code=500, detail=f"Parsing failed: {e}")
+
+    filename = f"{source or 'profile'}_{url[-40:] if url else 'pasted'}.html"
+    return {
+        "status": "success",
+        "filename": filename,
+        "source": source,
+        "data": structured_data,
+    }
+
 
 @app.post("/api/save-cv")
 def save_cv(payload: dict, db: Session = Depends(get_db), user: User = Depends(get_current_user)):

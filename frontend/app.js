@@ -195,6 +195,48 @@ async function uploadFile(file) {
 
 // Batch processing has been removed.
 
+// ── URL Import (LinkedIn / Xing / Freelancermap) ────────────────────────────
+async function importFromUrl() {
+    const url = document.getElementById('importUrlInput').value.trim();
+    const text = document.getElementById('importTextInput').value.trim();
+
+    if (!url && !text) {
+        alert('Bitte URL eingeben oder Profil-Text einfügen.');
+        return;
+    }
+
+    const btn = document.getElementById('btnImportUrl');
+    const originalHTML = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-spinner spinner mr-1"></i> Importing...';
+
+    showView('loadingView');
+
+    try {
+        const response = await apiFetch('/cvs/import-from-url', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url, text }),
+        });
+
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.detail || 'Import failed');
+
+        currentData = result.data;
+        currentFilename = result.filename;
+
+        showView('resultsView');
+        jsonEditor.value = JSON.stringify(currentData, null, 4);
+        updatePreview(currentData);
+    } catch (err) {
+        alert('Import failed: ' + err.message);
+        showView('uploadView');
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = originalHTML;
+    }
+}
+
 // ── Preview Panel ───────────────────────────────────────────────
 jsonEditor.addEventListener('input', (e) => {
     try {

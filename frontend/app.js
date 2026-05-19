@@ -1,4 +1,6 @@
-const API_BASE = "http://localhost:8000/api";
+// Relative path — in Docker, nginx proxies /api/* to the backend container.
+// Works the same when opening the frontend at any host/port.
+const API_BASE = "/api";
 let currentData = null;
 let currentFilename = "";
 let allCVs = []; // Cache for dashboard search

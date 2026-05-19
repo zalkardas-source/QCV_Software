@@ -1,5 +1,4 @@
 from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, status, BackgroundTasks
-from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
@@ -63,16 +62,11 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = De
         raise credentials_exception
     return user
 
-# Mount the static frontend
-import os
-frontend_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'frontend')
-app.mount("/frontend", StaticFiles(directory=frontend_dir), name="frontend")
-
+# Frontend is served by a separate nginx container (see frontend/Dockerfile).
+# In production nginx reverse-proxies /api/* to this backend, so cross-origin
+# requests don't happen. CORS settings still apply if someone hits the API
+# directly from a different origin.
 from fastapi.responses import RedirectResponse
-
-@app.get("/")
-async def root_redirect():
-    return RedirectResponse(url="/frontend/index.html")
 
 app.add_middleware(
     CORSMiddleware,
@@ -579,7 +573,9 @@ async def oauth_microsoft_callback(
     back to the frontend with `?connected=microsoft`. On failure: redirects
     with `?oauth_error=<msg>`.
     """
-    frontend_url = "/frontend/index.html"
+    # Nginx proxies / to the frontend container and /api to this backend,
+    # so a relative redirect lands on the SPA root.
+    frontend_url = "/"
 
     if error:
         msg = error_description or error

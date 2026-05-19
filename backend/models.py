@@ -65,14 +65,6 @@ class JobRequirement(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
-class ParsingCache(Base):
-    __tablename__ = "parsing_cache"
-
-    file_hash = Column(String, primary_key=True, index=True)
-    json_data = Column(Text) # Store the extracted JSON
-    created_at = Column(DateTime, default=datetime.utcnow)
-
-
 class OAuthAccount(Base):
     """Per-user OAuth connection to an external email provider.
 

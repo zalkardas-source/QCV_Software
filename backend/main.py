@@ -89,57 +89,30 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = 
     access_token = create_access_token(data={"sub": user.email})
     return {"access_token": access_token, "token_type": "bearer"}
 
-import hashlib
 import anyio
-
-def calculate_file_hash(file_content: bytes) -> str:
-    return hashlib.sha256(file_content).hexdigest()
 
 @app.post("/api/parse-cv")
 async def parse_cv(
-    file: UploadFile = File(...), 
+    file: UploadFile = File(...),
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Uploads a CV, checks cache, then parses it if needed. Optimized with Async/Threading."""
+    """Uploads a CV and parses it. Optimized with Async/Threading."""
     try:
         content = await file.read()
-        file_hash = calculate_file_hash(content)
-        
-        # 1. Check Cache
-        from backend.models import ParsingCache
-        cached_item = db.query(ParsingCache).filter(ParsingCache.file_hash == file_hash).first()
-        if cached_item:
-            return {
-                "status": "success",
-                "filename": file.filename,
-                "data": json.loads(cached_item.json_data),
-                "cached": True
-            }
-        
-        # 2. Extract markdown (CPU heavy -> Thread)
+
         raw_markdown = await anyio.to_thread.run_sync(
             extract_text_from_file, content, file.filename
         )
-        
-        # 3. LLM structure (Network bound -> Thread for consistency/timeout safety)
+
         structured_data = await anyio.to_thread.run_sync(
             structure_cv_data, raw_markdown
         )
-        
-        # 4. Save to Cache
-        new_cache = ParsingCache(
-            file_hash=file_hash,
-            json_data=json.dumps(structured_data)
-        )
-        db.add(new_cache)
-        db.commit()
-        
+
         return {
             "status": "success",
             "filename": file.filename,
             "data": structured_data,
-            "cached": False
         }
     except Exception as e:
         logger.error("Fatal error in parse_cv", exc_info=True)

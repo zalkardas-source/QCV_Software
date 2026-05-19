@@ -177,10 +177,20 @@ async function uploadFile(file) {
         });
 
         if (!response.ok) {
-            const errData = await response.json();
-            throw new Error(errData.detail || "API parsing failed");
+            const contentType = response.headers.get('content-type') || '';
+            if (contentType.includes('application/json')) {
+                const errData = await response.json();
+                throw new Error(errData.detail || "API parsing failed");
+            } else {
+                // nginx returned an HTML error page (502/504 timeout etc.)
+                throw new Error(`Server error (${response.status}). Das Backend ist nicht erreichbar oder das Parsing hat zu lange gedauert.`);
+            }
         }
 
+        const contentType = response.headers.get('content-type') || '';
+        if (!contentType.includes('application/json')) {
+            throw new Error('Server hat eine ungültige Antwort zurückgegeben (kein JSON). Bitte erneut versuchen.');
+        }
         const result = await response.json();
         currentData = result.data;
 
@@ -559,8 +569,19 @@ async function parseJobEmail() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ email_text: emailText }),
         });
+        const contentType = response.headers.get('content-type') || '';
+        if (!response.ok) {
+            if (contentType.includes('application/json')) {
+                const result = await response.json();
+                throw new Error(result.detail || 'Parsing failed');
+            } else {
+                throw new Error(`Server error (${response.status}). Backend nicht erreichbar oder Timeout.`);
+            }
+        }
+        if (!contentType.includes('application/json')) {
+            throw new Error('Ungültige Server-Antwort (kein JSON). Bitte erneut versuchen.');
+        }
         const result = await response.json();
-        if (!response.ok) throw new Error(result.detail || 'Parsing failed');
         currentJobData = result.data;
         renderJobPreview(currentJobData);
         document.getElementById('jobPreviewCard').classList.remove('hidden');

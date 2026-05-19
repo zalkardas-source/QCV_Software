@@ -27,48 +27,85 @@ from backend.schemas import CVData
 from backend.job_schemas import JobRequirementData
 from backend.config import settings
 
-# Initialize Docling converter globally to cache models
-_converter = None
+# Docling converters are initialized lazily and cached globally.
+# We keep two: a fast text-only one (default), and an OCR-enabled fallback
+# for scanned PDFs. Most modern CVs are digital and don't need OCR.
+_converter_fast = None
+_converter_ocr = None
 
-def get_docling_converter():
-    global _converter
-    if _converter is None:
-        # Optimization: Disable heavy features not needed for CV text extraction
-        pipeline_options = PdfPipelineOptions()
-        pipeline_options.do_ocr = True 
-        pipeline_options.do_table_structure = True
-        pipeline_options.images_scale = 0.0 
-        
-        _converter = DocumentConverter(
-            format_options={
-                InputFormat.PDF: PdfFormatOption(pipeline_options=pipeline_options)
-            }
-        )
-    return _converter
+# If the fast pass returns less text than this, we assume it's a scanned
+# PDF and re-run with OCR. 100 chars is well below any real CV's body text.
+_OCR_FALLBACK_MIN_CHARS = 100
+
+
+def _build_converter(do_ocr: bool, do_tables: bool):
+    pipeline_options = PdfPipelineOptions()
+    pipeline_options.do_ocr = do_ocr
+    pipeline_options.do_table_structure = do_tables
+    pipeline_options.images_scale = 0.0
+    return DocumentConverter(
+        format_options={
+            InputFormat.PDF: PdfFormatOption(pipeline_options=pipeline_options)
+        }
+    )
+
+
+def get_docling_converter(with_ocr: bool = False):
+    global _converter_fast, _converter_ocr
+    if with_ocr:
+        if _converter_ocr is None:
+            _converter_ocr = _build_converter(do_ocr=True, do_tables=True)
+        return _converter_ocr
+    if _converter_fast is None:
+        _converter_fast = _build_converter(do_ocr=False, do_tables=False)
+    return _converter_fast
+
 
 def warmup_docling():
-    """Initializes the Docling model to avoid delays during the first request."""
+    """Initializes the fast Docling converter so the first request isn't slow.
+    The OCR converter is built lazily only if a scanned PDF actually arrives."""
     logger.info("Warming up Docling engine...")
     try:
-        get_docling_converter()
+        get_docling_converter(with_ocr=False)
         logger.info("Docling engine ready.")
     except Exception as e:
         logger.error("Docling warmup failed: %s", e)
 
+
 def extract_text_from_file(file_content: bytes, filename: str) -> str:
-    """Extracts markdown from a document using Docling."""
-    ext = filename.split('.')[-1].lower() if "." in filename else "pdf"
+    """Extracts markdown from a document using Docling.
+
+    Strategy: fast pass without OCR / table detection. If the result looks
+    empty (a scanned PDF where Docling can't see text), retry with OCR on.
+    """
+    import time
     import uuid
+    ext = filename.split('.')[-1].lower() if "." in filename else "pdf"
     tmp_path = os.path.abspath(f"tmp_{uuid.uuid4().hex}.{ext}")
-    
+
     try:
         with open(tmp_path, 'wb') as f:
             f.write(file_content)
-        
-        converter = get_docling_converter()
-        # Convert with optimized pipeline
-        result = converter.convert(tmp_path)
-        return result.document.export_to_markdown()
+
+        t0 = time.perf_counter()
+        result = get_docling_converter(with_ocr=False).convert(tmp_path)
+        markdown = result.document.export_to_markdown()
+        logger.info(
+            "[Docling] fast pass: %d chars in %.2fs",
+            len(markdown), time.perf_counter() - t0,
+        )
+
+        if len(markdown.strip()) < _OCR_FALLBACK_MIN_CHARS:
+            logger.info("[Docling] fast pass returned almost no text, retrying with OCR.")
+            t1 = time.perf_counter()
+            result = get_docling_converter(with_ocr=True).convert(tmp_path)
+            markdown = result.document.export_to_markdown()
+            logger.info(
+                "[Docling] OCR pass: %d chars in %.2fs",
+                len(markdown), time.perf_counter() - t1,
+            )
+
+        return markdown
     except Exception as e:
         logger.error("Docling conversion error: %s: %s", type(e).__name__, e)
         raise e
@@ -134,16 +171,22 @@ def structure_cv_data(raw_markdown: str) -> dict:
         {"role": "user", "content": f"CV Text:\n{raw_markdown}"}
     ]
     
+    import time
     max_retries = 3
     for attempt in range(max_retries):
         text_content = None
         try:
             logger.info("[LLM] Extraction attempt %d/%d", attempt + 1, max_retries)
+            t0 = time.perf_counter()
             response = client.chat.completions.create(
-                model="minimax/minimax-m2.7",
+                model="openai/gpt-4o-mini",
                 messages=messages,
-                temperature=0.1
+                temperature=0,
+                seed=42,
+                response_format={"type": "json_object"},
+                timeout=60,
             )
+            logger.info("[LLM] gpt-4o-mini responded in %.2fs", time.perf_counter() - t0)
             
             logger.debug("[LLM] Response received. Choices: %d", len(response.choices))
             
@@ -231,9 +274,12 @@ def parse_job_email(email_text: str) -> dict:
         try:
             logger.info("[JOB] Extraction attempt %d/%d", attempt + 1, max_retries)
             response = client.chat.completions.create(
-                model="minimax/minimax-m2.7",
+                model="openai/gpt-4o-mini",
                 messages=messages,
-                temperature=0.1,
+                temperature=0,
+                seed=42,
+                response_format={"type": "json_object"},
+                timeout=60,
             )
             if not response.choices or not response.choices[0].message.content:
                 raise ValueError("LLM returned an empty response.")

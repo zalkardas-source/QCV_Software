@@ -1,4 +1,6 @@
-const API_BASE = "http://localhost:8000/api";
+// Relative path — in Docker, nginx proxies /api/* to the backend container.
+// Works the same when opening the frontend at any host/port.
+const API_BASE = "/api";
 let currentData = null;
 let currentFilename = "";
 let allCVs = []; // Cache for dashboard search
@@ -175,10 +177,20 @@ async function uploadFile(file) {
         });
 
         if (!response.ok) {
-            const errData = await response.json();
-            throw new Error(errData.detail || "API parsing failed");
+            const contentType = response.headers.get('content-type') || '';
+            if (contentType.includes('application/json')) {
+                const errData = await response.json();
+                throw new Error(errData.detail || "API parsing failed");
+            } else {
+                // nginx returned an HTML error page (502/504 timeout etc.)
+                throw new Error(`Server error (${response.status}). Das Backend ist nicht erreichbar oder das Parsing hat zu lange gedauert.`);
+            }
         }
 
+        const contentType = response.headers.get('content-type') || '';
+        if (!contentType.includes('application/json')) {
+            throw new Error('Server hat eine ungültige Antwort zurückgegeben (kein JSON). Bitte erneut versuchen.');
+        }
         const result = await response.json();
         currentData = result.data;
 
@@ -557,8 +569,19 @@ async function parseJobEmail() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ email_text: emailText }),
         });
+        const contentType = response.headers.get('content-type') || '';
+        if (!response.ok) {
+            if (contentType.includes('application/json')) {
+                const result = await response.json();
+                throw new Error(result.detail || 'Parsing failed');
+            } else {
+                throw new Error(`Server error (${response.status}). Backend nicht erreichbar oder Timeout.`);
+            }
+        }
+        if (!contentType.includes('application/json')) {
+            throw new Error('Ungültige Server-Antwort (kein JSON). Bitte erneut versuchen.');
+        }
         const result = await response.json();
-        if (!response.ok) throw new Error(result.detail || 'Parsing failed');
         currentJobData = result.data;
         renderJobPreview(currentJobData);
         document.getElementById('jobPreviewCard').classList.remove('hidden');
@@ -977,5 +1000,100 @@ document.getElementById('dashboardSearch').addEventListener('input', (e) => {
 
 document.getElementById('dashboardRefreshBtn').addEventListener('click', loadDashboard);
 
+// ── Outlook / Inbox OAuth ───────────────────────────────────────────────────
+function toggleInboxPanel() {
+    document.getElementById('inboxPanel').classList.toggle('hidden');
+}
+
+// Click outside → close panel
+document.addEventListener('click', (e) => {
+    const panel = document.getElementById('inboxPanel');
+    const btn = document.getElementById('inboxStatusBtn');
+    if (!panel || !btn) return;
+    if (panel.classList.contains('hidden')) return;
+    if (!panel.contains(e.target) && !btn.contains(e.target)) {
+        panel.classList.add('hidden');
+    }
+});
+
+async function refreshInboxStatus() {
+    if (!authToken) return;
+    try {
+        const r = await apiFetch('/oauth/status');
+        if (!r.ok) return;
+        const status = await r.json();
+        const ms = status.microsoft || { connected: false };
+
+        const dot = document.getElementById('inboxStatusDot');
+        const notConnected = document.getElementById('inboxNotConnected');
+        const connected = document.getElementById('inboxConnected');
+        const notConfigured = document.getElementById('inboxNotConfigured');
+
+        if (ms.connected) {
+            dot.classList.remove('bg-slate-300', 'bg-red-400');
+            dot.classList.add('bg-green-500');
+            notConnected.classList.add('hidden');
+            connected.classList.remove('hidden');
+            document.getElementById('inboxConnectedEmail').textContent = ms.email || '';
+        } else {
+            dot.classList.remove('bg-green-500', 'bg-red-400');
+            dot.classList.add('bg-slate-300');
+            connected.classList.add('hidden');
+            notConnected.classList.remove('hidden');
+            // Backend not configured → show hint
+            if (ms.configured === false) {
+                notConfigured.classList.remove('hidden');
+            } else {
+                notConfigured.classList.add('hidden');
+            }
+        }
+    } catch (err) {
+        console.error('inbox status failed', err);
+    }
+}
+
+async function connectOutlook() {
+    try {
+        const r = await apiFetch('/oauth/microsoft/authorize');
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.detail || 'Authorize failed');
+        // Redirect the browser to Microsoft's sign-in page
+        window.location.href = data.url;
+    } catch (err) {
+        alert('Verbindung fehlgeschlagen: ' + err.message);
+    }
+}
+
+async function disconnectOutlook() {
+    if (!confirm('Outlook-Verbindung wirklich trennen?')) return;
+    try {
+        const r = await apiFetch('/oauth/microsoft/disconnect', { method: 'POST' });
+        if (!r.ok) {
+            const d = await r.json();
+            throw new Error(d.detail || 'Disconnect failed');
+        }
+        refreshInboxStatus();
+        document.getElementById('inboxPanel').classList.add('hidden');
+    } catch (err) {
+        alert('Trennen fehlgeschlagen: ' + err.message);
+    }
+}
+
+// Handle OAuth callback redirect (?connected=microsoft or ?oauth_error=...)
+(function handleOAuthCallbackParams() {
+    const params = new URLSearchParams(window.location.search);
+    if (params.has('connected')) {
+        alert('Outlook erfolgreich verbunden.');
+        history.replaceState({}, '', window.location.pathname);
+    } else if (params.has('oauth_error')) {
+        alert('Outlook-Verbindung fehlgeschlagen: ' + params.get('oauth_error'));
+        history.replaceState({}, '', window.location.pathname);
+    }
+})();
+
+// Refresh status whenever the user logs in or the panel opens
+document.getElementById('inboxStatusBtn').addEventListener('click', refreshInboxStatus);
+
 // Run init on load
 init();
+if (authToken) refreshInboxStatus();

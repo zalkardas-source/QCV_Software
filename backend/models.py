@@ -65,9 +65,19 @@ class JobRequirement(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
-class ParsingCache(Base):
-    __tablename__ = "parsing_cache"
-    
-    file_hash = Column(String, primary_key=True, index=True)
-    json_data = Column(Text) # Store the extracted JSON
-    created_at = Column(DateTime, default=datetime.utcnow)
+class OAuthAccount(Base):
+    """Per-user OAuth connection to an external email provider.
+
+    The refresh_token is encrypted at rest (see backend.crypto). Access tokens
+    are short-lived and not stored — fetched fresh from MSAL's token cache
+    each request and discarded.
+    """
+    __tablename__ = "oauth_accounts"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    provider = Column(String, nullable=False)  # "microsoft" | "google" (future)
+    email_address = Column(String, nullable=False)
+    refresh_token_encrypted = Column(Text, nullable=False)
+    scopes = Column(Text, nullable=True)  # space-separated
+    connected_at = Column(DateTime, default=datetime.utcnow)

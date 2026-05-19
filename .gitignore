@@ -23,3 +23,9 @@ venv/
 
 # Local scratch/experiments (not part of the app)
 scratch/
+
+# Claude Code local settings
+.claude/
+
+# Docker build logs (created locally during compose build)
+build.log

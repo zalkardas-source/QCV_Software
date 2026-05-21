@@ -19,6 +19,7 @@ const headerActions = document.getElementById('headerActions');
 const jsonEditor = document.getElementById('jsonEditor');
 const btnSaveDB = document.getElementById('btnSaveDB');
 const btnGeneratePPTX = document.getElementById('btnGeneratePPTX');
+const btnGeneratePDF = document.getElementById('btnGeneratePDF');
 const navDashboardBtn = document.getElementById('navDashboardBtn');
 const navUploadBtn = document.getElementById('navUploadBtn');
 const navJobsBtn = document.getElementById('navJobsBtn');
@@ -339,11 +340,11 @@ btnSaveDB.addEventListener('click', async () => {
     }
 });
 
-// ── Generate PPTX ───────────────────────────────────────────────
-function triggerBlobDownload(blob, filename) {
-    // Ensure filename ends with .pptx
-    if (!filename.toLowerCase().endsWith('.pptx')) filename += '.pptx';
-    
+// ── Generate PPTX / PDF ─────────────────────────────────────────
+function triggerBlobDownload(blob, filename, ext = '.pptx') {
+    // Ensure filename ends with the expected extension
+    if (!filename.toLowerCase().endsWith(ext)) filename += ext;
+
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.style.display = 'none';
@@ -425,6 +426,64 @@ btnGeneratePPTX.addEventListener('click', async () => {
     }
 });
 
+async function downloadPDFDirect(cvId) {
+    const url = `${API_BASE}/cvs/${cvId}/pdf`;
+    const response = await fetch(url, {
+        headers: { "Authorization": `Bearer ${authToken}` }
+    });
+    if (!response.ok) {
+        const errData = await response.json().catch(() => ({ detail: "Failed to download PDF" }));
+        throw new Error(errData.detail || "Server error during PDF generation");
+    }
+
+    let filename = "CV_Profile.pdf";
+    const disposition = response.headers.get("Content-Disposition");
+    if (disposition) {
+        const match = disposition.match(/filename[^;=\n]*="?([^";\n]+)"?/i);
+        if (match && match[1]) filename = match[1];
+    }
+
+    const arrayBuffer = await response.arrayBuffer();
+    const blob = new Blob([arrayBuffer], { type: 'application/pdf' });
+    triggerBlobDownload(blob, filename, '.pdf');
+}
+
+async function generatePDFFromData(data) {
+    if (!data || Object.keys(data).length === 0) {
+        throw new Error("No data available to export.");
+    }
+    const response = await apiFetch(`/export-pdf`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ data })
+    });
+    if (!response.ok) {
+        const errData = await response.json().catch(() => ({ detail: "Failed to generate PDF" }));
+        throw new Error(errData.detail || "Server error during PDF generation");
+    }
+
+    const name = data.personal_information?.full_name || "CV";
+    const filename = `${name.replace(/\s+/g, '_')}_Profile.pdf`;
+
+    const arrayBuffer = await response.arrayBuffer();
+    const blob = new Blob([arrayBuffer], { type: 'application/pdf' });
+    triggerBlobDownload(blob, filename, '.pdf');
+}
+
+btnGeneratePDF.addEventListener('click', async () => {
+    try {
+        const finalData = JSON.parse(jsonEditor.value);
+        const btnOriginalHTML = btnGeneratePDF.innerHTML;
+        btnGeneratePDF.innerHTML = '<i class="fa-solid fa-spinner spinner"></i> Generating...';
+        await generatePDFFromData(finalData);
+        btnGeneratePDF.innerHTML = '<i class="fa-solid fa-check"></i> Downloaded';
+        setTimeout(() => { btnGeneratePDF.innerHTML = btnOriginalHTML; }, 2000);
+    } catch (err) {
+        alert("Error generating PDF: " + err.message);
+        btnGeneratePDF.innerHTML = '<i class="fa-solid fa-file-pdf"></i> Generate PDF';
+    }
+});
+
 // ── Dashboard ───────────────────────────────────────────────────
 async function loadDashboard() {
     const tbody = document.getElementById('dashboardTableBody');
@@ -485,6 +544,7 @@ function renderDashboardTable(cvs) {
             <td class="px-3 py-2.5 text-right">
                 <div class="flex items-center justify-end gap-1">
                     <button onclick="previewCandidate(${cv.id})" class="p-1.5 rounded hover:bg-brand-light text-slate-400 hover:text-brand-blue transition-colors" title="Anzeigen"><i class="fa-solid fa-eye text-sm"></i></button>
+                    <button onclick="downloadCVPDF(${cv.id})" class="p-1.5 rounded hover:bg-red-50 text-slate-400 hover:text-red-600 transition-colors" title="PDF"><i class="fa-solid fa-file-pdf text-sm"></i></button>
                     <button onclick="downloadCVPPTX(${cv.id})" class="p-1.5 rounded hover:bg-green-50 text-slate-400 hover:text-green-600 transition-colors" title="PPTX"><i class="fa-solid fa-file-powerpoint text-sm"></i></button>
                     <button onclick="deleteCV(${cv.id})" class="p-1.5 rounded hover:bg-red-50 text-slate-400 hover:text-red-500 transition-colors" title="Löschen"><i class="fa-solid fa-trash-can text-sm"></i></button>
                 </div>
@@ -509,6 +569,12 @@ async function downloadCVPPTX(id) {
     try {
         await downloadPPTXDirect(id);
     } catch (err) { alert("Error downloading PPTX: " + err.message); }
+}
+
+async function downloadCVPDF(id) {
+    try {
+        await downloadPDFDirect(id);
+    } catch (err) { alert("Error downloading PDF: " + err.message); }
 }
 
 async function deleteCV(id) {
@@ -901,6 +967,9 @@ function renderMatchResults() {
         const matched = c.matched_required.map(s =>
             `<span class="bg-green-50 text-green-700 text-xs px-1.5 py-0.5 rounded border border-green-200">${stripParen(s)}</span>`
         ).join('');
+        const partial = (c.partial_required || []).map(s =>
+            `<span class="bg-amber-50 text-amber-700 text-xs px-1.5 py-0.5 rounded border border-amber-200" title="Skill vorhanden, aber Niveau unter Anforderung">${stripParen(s)}</span>`
+        ).join('');
         const missing = c.missing_required.map(s =>
             `<span class="bg-red-50 text-red-500 text-xs px-1.5 py-0.5 rounded border border-red-200 line-through">${stripParen(s)}</span>`
         ).join('');
@@ -935,7 +1004,7 @@ function renderMatchResults() {
                     </button>
                 </div>
                 <div class="text-[11px] text-slate-500 mb-2">${breakdown}</div>
-                <div class="flex flex-wrap gap-1.5">${matched}${missing}${nice}</div>
+                <div class="flex flex-wrap gap-1.5">${matched}${partial}${missing}${nice}</div>
             </div>
         </div>`;
     }).join('');

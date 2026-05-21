@@ -27,6 +27,7 @@ from backend.models import User, CVProfile, Skill, Project, JobRequirement, OAut
 from backend.services import extract_text_from_file, structure_cv_data, warmup_docling, parse_job_email
 from backend.scraping import fetch_url, detect_source
 from backend.export_pptx import create_pptx_summary
+from backend.export_pdf import create_pdf_summary
 from backend import oauth_microsoft, crypto
 
 # Initialize DB tables
@@ -251,16 +252,58 @@ def download_cv_pptx(cv_id: int, db: Session = Depends(get_db), user: User = Dep
     profile = db.query(CVProfile).filter(CVProfile.id == cv_id).first()
     if not profile:
         raise HTTPException(status_code=404, detail="CV not found")
-    
+
     data = json.loads(profile.raw_json) if profile.raw_json else {}
     pptx_bytes = create_pptx_summary(data)
-    
+
     name = (profile.name or "CV").replace(' ', '_')
     filename = f"{name}_Summary.pptx"
-    
+
     return Response(
         content=pptx_bytes,
         media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
+
+@app.post("/api/export-pdf")
+async def export_pdf(payload: dict, user: User = Depends(get_current_user)):
+    """Generates a PDF profile from JSON data (used by the edit view)."""
+    try:
+        data = payload.get("data", {})
+        if not data:
+            raise ValueError("No data provided")
+
+        pdf_bytes = await anyio.to_thread.run_sync(create_pdf_summary, data)
+
+        personal = data.get("personal_information", {})
+        name = personal.get("full_name", "CV")
+        filename = f"{name.replace(' ', '_')}_Profile.pdf"
+
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+        )
+    except Exception as e:
+        logger.error("PDF export error: %s", e)
+        raise HTTPException(status_code=500, detail=f"{str(e)}")
+
+@app.get("/api/cvs/{cv_id}/pdf")
+def download_cv_pdf(cv_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    """Downloads the candidate profile of a stored CV as PDF."""
+    profile = db.query(CVProfile).filter(CVProfile.id == cv_id).first()
+    if not profile:
+        raise HTTPException(status_code=404, detail="CV not found")
+
+    data = json.loads(profile.raw_json) if profile.raw_json else {}
+    pdf_bytes = create_pdf_summary(data)
+
+    name = (profile.name or "CV").replace(' ', '_')
+    filename = f"{name}_Profile.pdf"
+
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'}
     )
 

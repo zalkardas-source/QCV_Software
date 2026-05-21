@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>{{ full_name }} — CV Profile</title>
+<style>
+    @page {
+        size: A4;
+        margin: 18mm 16mm 20mm 16mm;
+
+        @top-left {
+            content: "{{ full_name }}";
+            font-family: "DejaVu Sans", "Helvetica", sans-serif;
+            font-size: 8.5pt;
+            color: #6b7280;
+            vertical-align: middle;
+            padding-bottom: 3mm;
+            border-bottom: 0.4pt solid #d1d5db;
+        }
+        @top-right {
+            content: "Quatelio CVision";
+            font-family: "DejaVu Sans", "Helvetica", sans-serif;
+            font-size: 8.5pt;
+            font-weight: bold;
+            color: #00569c;
+            vertical-align: middle;
+            padding-bottom: 3mm;
+            border-bottom: 0.4pt solid #d1d5db;
+        }
+        @bottom-left {
+            content: "Confidential — Candidate Profile";
+            font-family: "DejaVu Sans", "Helvetica", sans-serif;
+            font-size: 7.5pt;
+            color: #9ca3af;
+            vertical-align: top;
+            padding-top: 3mm;
+        }
+        @bottom-right {
+            content: "Page " counter(page) " of " counter(pages);
+            font-family: "DejaVu Sans", "Helvetica", sans-serif;
+            font-size: 7.5pt;
+            color: #9ca3af;
+            vertical-align: top;
+            padding-top: 3mm;
+        }
+    }
+
+    /* First page: no running header (Hero takes its place), but keep
+       the side margins so the body content lines up with later pages. */
+    @page :first {
+        margin: 0 16mm 20mm 16mm;
+
+        @top-left { content: none; border: none; }
+        @top-right { content: none; border: none; }
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+        font-family: "DejaVu Sans", "Helvetica", sans-serif;
+        font-size: 10pt;
+        color: #1e1e23;
+        line-height: 1.5;
+        margin: 0;
+    }
+
+    /* ── Hero (first page) ────────────────────────────────────── */
+    .hero {
+        background: #003a6b;
+        color: white;
+        /* Bleed sideways to the page edge; top padding gives the name
+           breathing room. No negative top-margin = no clipping. */
+        margin: 0 -16mm 9mm -16mm;
+        padding: 22mm 16mm 13mm 16mm;
+        position: relative;
+    }
+    .hero-brand {
+        position: absolute;
+        top: 9mm;
+        right: 16mm;
+        font-size: 8.5pt;
+        font-weight: bold;
+        letter-spacing: 1.5pt;
+        color: #8eb4d8;
+        text-transform: uppercase;
+    }
+    .hero-identity {
+        display: flex;
+        align-items: center;
+        gap: 7mm;
+    }
+    .hero-initials {
+        flex: 0 0 18mm;
+        width: 18mm;
+        height: 18mm;
+        border-radius: 50%;
+        background: #00569c;
+        color: white;
+        font-size: 16pt;
+        font-weight: bold;
+        letter-spacing: 0.5pt;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border: 0.6mm solid #4a78a8;
+    }
+    .hero-name {
+        margin: 0;
+        font-size: 24pt;
+        font-weight: 300;
+        letter-spacing: 0.3pt;
+        line-height: 1.1;
+    }
+    .hero-subtitle {
+        margin-top: 1.5mm;
+        font-size: 9.5pt;
+        color: #c8d7eb;
+        letter-spacing: 0.3pt;
+    }
+    .hero-subtitle .dot {
+        color: #4a78a8;
+        margin: 0 2.5mm;
+    }
+    .hero-contacts {
+        margin-top: 7mm;
+        padding-top: 5mm;
+        border-top: 0.3mm solid #4a6a8a;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 2mm 6mm;
+        font-size: 9pt;
+        color: #d8e3f0;
+    }
+    .hero-contacts .item {
+        white-space: nowrap;
+    }
+    .hero-contacts .icon {
+        color: #8eb4d8;
+        margin-right: 1.5mm;
+    }
+
+    /* ── Section heading ──────────────────────────────────────── */
+    .section {
+        margin-top: 7mm;
+    }
+    .section-title {
+        font-size: 10pt;
+        font-weight: bold;
+        color: #00569c;
+        letter-spacing: 1.2pt;
+        text-transform: uppercase;
+        margin-bottom: 1.5mm;
+    }
+    .section-title-bar {
+        height: 0.6mm;
+        width: 14mm;
+        background: #00569c;
+        margin-bottom: 4mm;
+    }
+
+    /* ── Executive summary ────────────────────────────────────── */
+    .summary {
+        color: #414147;
+        font-size: 9.5pt;
+        text-align: justify;
+        line-height: 1.55;
+    }
+
+    /* ── Skills (3-column grid) ───────────────────────────────── */
+    .skills-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr 1fr;
+        gap: 5mm 8mm;
+    }
+    .skill-group {
+        break-inside: avoid;
+    }
+    .skill-group-name {
+        font-size: 7.5pt;
+        font-weight: bold;
+        color: #b4b9c3;
+        text-transform: uppercase;
+        letter-spacing: 0.6pt;
+        padding-bottom: 1.5mm;
+        border-bottom: 0.4pt solid #e1e6ee;
+        margin-bottom: 2.5mm;
+    }
+    .skill-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        font-size: 8.5pt;
+        margin-bottom: 1.8mm;
+        color: #414147;
+    }
+    .skill-row .name {
+        flex: 1;
+        padding-right: 2mm;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    .skill-row .dots {
+        white-space: nowrap;
+        font-size: 0;
+        flex-shrink: 0;
+    }
+    .skill-row .dot {
+        display: inline-block;
+        width: 1.8mm;
+        height: 1.8mm;
+        border-radius: 50%;
+        background: #e1e6ee;
+        margin-left: 0.6mm;
+    }
+    .skill-row .dot.filled {
+        background: #00569c;
+    }
+
+    /* ── Experience ──────────────────────────────────────────── */
+    .experience-item {
+        position: relative;
+        padding-left: 4mm;
+        margin-bottom: 5mm;
+        break-inside: avoid;
+    }
+    .experience-item::before {
+        content: "";
+        position: absolute;
+        left: 0;
+        top: 1mm;
+        bottom: 1mm;
+        width: 1mm;
+        background: #00569c;
+        border-radius: 0.5mm;
+    }
+    .experience-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        margin-bottom: 1.5mm;
+    }
+    .experience-name {
+        font-size: 11.5pt;
+        font-weight: bold;
+        color: #1e1e23;
+        letter-spacing: 0.1pt;
+    }
+    .experience-duration {
+        font-size: 8.5pt;
+        color: #6b7280;
+        font-style: italic;
+        white-space: nowrap;
+        padding-left: 3mm;
+        background: #f3f4f6;
+        padding: 0.6mm 2mm;
+        border-radius: 1mm;
+        font-style: normal;
+    }
+    .experience-description {
+        font-size: 9pt;
+        color: #414147;
+        text-align: justify;
+        line-height: 1.55;
+    }
+
+    /* Prevent orphans — keep section title with first item */
+    .section-title, .section-title-bar { break-after: avoid; }
+</style>
+</head>
+<body>
+
+<div class="hero">
+    <div class="hero-brand">Quatelio CVision</div>
+
+    <div class="hero-identity">
+        <div class="hero-initials">{{ initials }}</div>
+        <div>
+            <div class="hero-name">{{ full_name }}</div>
+            {% if subtitle_parts %}
+            <div class="hero-subtitle">
+                {% for part in subtitle_parts %}{% if not loop.first %}<span class="dot">·</span>{% endif %}{{ part }}{% endfor %}
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    {% if contacts %}
+    <div class="hero-contacts">
+        {% for c in contacts %}
+        <div class="item"><span class="icon">{{ c.icon }}</span>{{ c.value }}</div>
+        {% endfor %}
+    </div>
+    {% endif %}
+</div>
+
+{% if summary %}
+<div class="section">
+    <div class="section-title">Executive Summary</div>
+    <div class="section-title-bar"></div>
+    <div class="summary">{{ summary }}</div>
+</div>
+{% endif %}
+
+{% if skill_matrix %}
+<div class="section">
+    <div class="section-title">Core Skills &amp; Competences</div>
+    <div class="section-title-bar"></div>
+    <div class="skills-grid">
+        {% for group in skill_matrix %}
+        <div class="skill-group">
+            <div class="skill-group-name">{{ group.category or "General" }}</div>
+            {% for skill in group.skills %}
+            <div class="skill-row">
+                <span class="name">{{ skill.skill }}</span>
+                <span class="dots">
+                    {% set r = skill.rating_int %}
+                    {% for i in range(10) %}<span class="dot {% if i < r %}filled{% endif %}"></span>{% endfor %}
+                </span>
+            </div>
+            {% endfor %}
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+{% if projects %}
+<div class="section">
+    <div class="section-title">Professional Experience</div>
+    <div class="section-title-bar"></div>
+    {% for proj in projects %}
+    <div class="experience-item">
+        <div class="experience-header">
+            <span class="experience-name">{{ proj.name or "Position" }}</span>
+            {% if proj.duration %}<span class="experience-duration">{{ proj.duration }}</span>{% endif %}
+        </div>
+        {% if proj.description %}
+        <div class="experience-description">{{ proj.description }}</div>
+        {% endif %}
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+
+</body>
+</html>

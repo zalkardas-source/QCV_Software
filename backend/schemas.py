@@ -13,11 +13,11 @@ class PersonalInformation(BaseModel):
     website: Optional[str] = Field(default=None, description="Personal website or portfolio URL")
 
 class Skill(BaseModel):
-    skill: str = Field(description="The name of the skill, e.g. Python, Leadership")
+    skill: str = Field(description="The name of the skill, e.g. Python, SQL")
     rating: int = Field(default=4, description="Numeric rating 1-10 based on evidence in the CV. See rating rules.")
 
 class SkillGroup(BaseModel):
-    category: str = Field(description="Category of the skills. Use standard names: Programming Languages, Frameworks & Libraries, Databases, Tools & Platforms, SAP, Data & Analytics, Soft Skills, Languages.")
+    category: str = Field(description="Category of the skills. Use standard names: Programming Languages, Frameworks & Libraries, Databases, Tools & Platforms, SAP, Data & Analytics, Languages.")
     skills: List[Skill] = Field(description="List of skills within this category")
 
 class Project(BaseModel):

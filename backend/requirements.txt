@@ -13,3 +13,5 @@ python-dotenv
 msal
 requests
 beautifulsoup4
+weasyprint
+jinja2

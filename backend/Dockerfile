@@ -10,11 +10,17 @@ WORKDIR /app
 # System deps:
 # - libgl1, libglib2.0-0: OpenCV runtime (used by Docling)
 # - libreoffice: DOCX -> PDF conversion (used by Docling)
+# - libpango/libharfbuzz/shared-mime-info/fonts-dejavu: WeasyPrint PDF rendering
 # - curl: healthcheck
 RUN apt-get update && apt-get install -y --no-install-recommends \
         libgl1 \
         libglib2.0-0 \
         libreoffice \
+        libpango-1.0-0 \
+        libpangoft2-1.0-0 \
+        libharfbuzz0b \
+        shared-mime-info \
+        fonts-dejavu \
         curl \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*

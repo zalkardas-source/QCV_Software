@@ -133,8 +133,8 @@ def structure_cv_data(raw_markdown: str) -> dict:
        - "Tools & Platforms"      (Git, Docker, AWS, Jira, Linux, ...)
        - "SAP"                    (SAP ERP, S/4HANA, FI, CO, MM, SD, ...)
        - "Data & Analytics"       (Excel, Power BI, Tableau, Pandas, ...)
-       - "Soft Skills"            (Leadership, Communication, ...)
        - "Languages"              (English, German, French, ... — spoken languages only)
+       Do NOT extract soft skills (Leadership, Communication, Teamwork, ...) — skip them entirely.
        Do NOT repeat the same skill in multiple categories.
 
     2. RATINGS — Assign 1-10 based on actual evidence across the entire CV.

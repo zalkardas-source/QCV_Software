@@ -967,6 +967,9 @@ function renderMatchResults() {
         const matched = c.matched_required.map(s =>
             `<span class="bg-green-50 text-green-700 text-xs px-1.5 py-0.5 rounded border border-green-200">${stripParen(s)}</span>`
         ).join('');
+        const partial = (c.partial_required || []).map(s =>
+            `<span class="bg-amber-50 text-amber-700 text-xs px-1.5 py-0.5 rounded border border-amber-200" title="Skill vorhanden, aber Niveau unter Anforderung">${stripParen(s)}</span>`
+        ).join('');
         const missing = c.missing_required.map(s =>
             `<span class="bg-red-50 text-red-500 text-xs px-1.5 py-0.5 rounded border border-red-200 line-through">${stripParen(s)}</span>`
         ).join('');
@@ -1001,7 +1004,7 @@ function renderMatchResults() {
                     </button>
                 </div>
                 <div class="text-[11px] text-slate-500 mb-2">${breakdown}</div>
-                <div class="flex flex-wrap gap-1.5">${matched}${missing}${nice}</div>
+                <div class="flex flex-wrap gap-1.5">${matched}${partial}${missing}${nice}</div>
             </div>
         </div>`;
     }).join('');

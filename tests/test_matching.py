@@ -2,6 +2,7 @@
 from backend.matching import (
     match_score,
     normalize,
+    required_level,
     tokens,
     REQUIRED_CAP,
     SKILLS_WEIGHT,
@@ -363,3 +364,98 @@ def test_required_threshold_not_triggered_at_half():
     result = match_score(candidate, required, [])
     # 50% matched at full rating → skills score 50, no cap
     assert result["score"] == 50
+
+
+# ── required_level() — modifier-based minimum rating ─────────────────────────
+
+def test_required_level_no_modifier_defaults_to_one():
+    assert required_level("Deutsch") == 1
+    assert required_level("Python") == 1
+
+
+def test_required_level_fluent_german_phrasing():
+    assert required_level("fließende Deutschkenntnisse") == 8
+    assert required_level("Deutsch fließend") == 8
+
+
+def test_required_level_basic_phrasing():
+    assert required_level("Grundkenntnisse Französisch") == 3
+    assert required_level("Französisch (basic)") == 3
+
+
+def test_required_level_expert_parenthetical():
+    assert required_level("Python (Expert)") == 8
+
+
+def test_required_level_highest_modifier_wins():
+    # mixed phrasing — pick the stronger requirement
+    assert required_level("Grundkenntnisse, idealerweise fließend") == 8
+
+
+# ── partial_required — skill present but below required level ────────────────
+
+def test_partial_required_when_below_level():
+    """Job needs fluent German, candidate has German 5/10 → partial, not full match."""
+    candidate = [{"skill": "Deutsch", "rating": 5}]
+    result = match_score(candidate, ["fließende Deutschkenntnisse"], [])
+    assert result["matched_required"] == []
+    assert result["partial_required"] == ["fließende Deutschkenntnisse"]
+    assert result["missing_required"] == []
+
+
+def test_full_match_when_at_or_above_level():
+    """Same job, candidate now has German 8/10 → full match."""
+    candidate = [{"skill": "Deutsch", "rating": 8}]
+    result = match_score(candidate, ["fließende Deutschkenntnisse"], [])
+    assert result["matched_required"] == ["fließende Deutschkenntnisse"]
+    assert result["partial_required"] == []
+
+
+def test_partial_does_not_contribute_to_score():
+    """A partial skill adds nothing to the skills score (same as missing)."""
+    candidate = [{"skill": "Deutsch", "rating": 5}]
+    result = match_score(candidate, ["fließende Deutschkenntnisse"], [])
+    assert result["skills_score"] == 0
+
+
+def test_partial_does_not_count_toward_threshold():
+    """Only 1 of 2 required matches fully, the other is partial → cap kicks in."""
+    candidate = [
+        {"skill": "Python", "rating": 10},
+        {"skill": "Deutsch", "rating": 4},
+    ]
+    required = ["Python", "fließende Deutschkenntnisse"]
+    result = match_score(candidate, required, [])
+    # 1/2 full matches = 50% → not below threshold → no cap, but skills_score
+    # only reflects the one full match.
+    assert "Python" in result["matched_required"]
+    assert "fließende Deutschkenntnisse" in result["partial_required"]
+    # skills score: (10/10 * 1.0) / 2.0 = 50
+    assert result["skills_score"] == 50
+
+
+def test_partial_drops_below_threshold_triggers_cap():
+    """All required skills present but all below level → REQUIRED_CAP applies.
+
+    Partials don't contribute to score, so skills_score is 0. The cap is an
+    upper bound, so the final score stays at 0 — well below the cap.
+    """
+    candidate = [
+        {"skill": "Deutsch", "rating": 4},
+        {"skill": "Englisch", "rating": 3},
+    ]
+    required = ["fließende Deutschkenntnisse", "verhandlungssicheres Englisch"]
+    result = match_score(candidate, required, [])
+    assert result["matched_required"] == []
+    assert len(result["partial_required"]) == 2
+    # 0 full matches → score 0; cap would have fired but raw score is already
+    # under it. Either way, the result is bounded by REQUIRED_CAP.
+    assert result["score"] <= REQUIRED_CAP
+
+
+def test_default_level_one_keeps_old_behavior():
+    """Skill without modifier — any rating still counts as full match."""
+    candidate = [{"skill": "Python", "rating": 1}]
+    result = match_score(candidate, ["Python"], [])
+    assert result["matched_required"] == ["Python"]
+    assert result["partial_required"] == []

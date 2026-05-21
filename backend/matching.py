@@ -38,6 +38,29 @@ STOP_WORDS = {
 }
 
 
+# Level modifiers in required-skill strings → minimum rating (1-10).
+# Keys are stems; required_level() also accepts up to 3 trailing chars to
+# cover German inflections (fließend → fließende, fließendes, fließenden).
+# Highest-matching modifier wins (e.g. "fließende Grundkenntnisse" → 8, not 3).
+LEVEL_MODIFIERS: dict[str, int] = {
+    # Highest tier (≥ 8) — full proficiency
+    "fließend": 8, "fliessend": 8,
+    "verhandlungssicher": 8,
+    "muttersprachlich": 9, "muttersprache": 9, "native": 9,
+    "expert": 8, "experte": 8, "expertin": 8,
+    "fluent": 8,
+    # Advanced (≥ 6)
+    "fortgeschritten": 6,
+    "advanced": 6, "proficient": 6,
+    "tiefgehend": 6,
+    # Solid (≥ 5)
+    "intermediate": 5, "gut": 5,
+    # Basic (≥ 3)
+    "basic": 3, "basics": 3,
+    "grundlegend": 3, "grundkenntnisse": 3, "grundwissen": 3,
+}
+
+
 def normalize(name: str) -> str:
     """Lowercase, strip, and apply alias mapping → canonical form."""
     n = name.lower().strip()
@@ -48,6 +71,32 @@ def tokens(name: str) -> set[str]:
     """Split a skill name into meaningful tokens, removing stop words."""
     words = re.split(r'[\s\-_/().,;:]+', normalize(name))
     return {w for w in words if len(w) >= 2 and w not in STOP_WORDS}
+
+
+def required_level(skill: str) -> int:
+    """Extract minimum required rating (1-10) from modifier words in a skill string.
+
+    "Deutsch"                       → 1 (no modifier, anything counts)
+    "fließende Deutschkenntnisse"   → 8 (fließend + -e inflection)
+    "verhandlungssicheres Englisch" → 8 (verhandlungssicher + -es)
+    "Grundkenntnisse Französisch"   → 3 (grundkenntnisse)
+    "Python (Expert)"               → 8 (expert)
+    Highest matching modifier wins. Modifier stems may have up to 3 trailing
+    chars (covers German -e/-es/-er/-en/-em/-es endings).
+    """
+    words = re.split(r'[\s\-_/().,;:]+', skill.lower())
+    levels = []
+    for w in words:
+        if not w:
+            continue
+        if w in LEVEL_MODIFIERS:
+            levels.append(LEVEL_MODIFIERS[w])
+            continue
+        for stem, level in LEVEL_MODIFIERS.items():
+            if w.startswith(stem) and len(w) - len(stem) <= 3:
+                levels.append(level)
+                break
+    return max(levels) if levels else 1
 
 
 # Score component weights. When a component is not applicable for a given
@@ -110,18 +159,30 @@ def _skill_match_score(candidate_skills: list, required: list, nice: list) -> di
 
     total_weight = len(required) * 1.0 + len(nice) * 0.5
     if total_weight == 0:
-        return {"score": 0, "matched_required": [], "missing_required": [], "matched_nice": []}
+        return {
+            "score": 0,
+            "matched_required": [],
+            "partial_required": [],
+            "missing_required": [],
+            "matched_nice": [],
+        }
 
     score = 0.0
-    matched_required, missing_required, matched_nice = [], [], []
+    matched_required, partial_required, missing_required, matched_nice = [], [], [], []
 
     for skill in required:
         rating = find(skill)
-        if rating is not None:
+        if rating is None:
+            missing_required.append(skill)
+            continue
+        min_level = required_level(skill)
+        if rating >= min_level:
             score += (rating / 10) * 1.0
             matched_required.append(skill)
         else:
-            missing_required.append(skill)
+            # Skill present but below required level — does not count toward
+            # the score nor toward the required-skill threshold.
+            partial_required.append(skill)
 
     for skill in nice:
         rating = find(skill)
@@ -132,6 +193,7 @@ def _skill_match_score(candidate_skills: list, required: list, nice: list) -> di
     return {
         "score": round((score / total_weight) * 100),
         "matched_required": matched_required,
+        "partial_required": partial_required,
         "missing_required": missing_required,
         "matched_nice": matched_nice,
     }
@@ -207,7 +269,7 @@ def match_score(
     Returns a dict with:
       - score: combined final score 0-100
       - skills_score, experience_score, location_score: component scores (None if N/A)
-      - matched_required, missing_required, matched_nice: skill lists
+      - matched_required, partial_required, missing_required, matched_nice: skill lists
     """
     skill_part = _skill_match_score(candidate_skills, required, nice)
     skills_score = skill_part["score"]
@@ -236,6 +298,7 @@ def match_score(
         "experience_score": exp_score,
         "location_score": loc_score,
         "matched_required": skill_part["matched_required"],
+        "partial_required": skill_part["partial_required"],
         "missing_required": skill_part["missing_required"],
         "matched_nice": skill_part["matched_nice"],
     }

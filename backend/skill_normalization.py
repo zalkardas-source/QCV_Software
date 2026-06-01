@@ -122,7 +122,7 @@ SKILL_REGISTRY: dict[str, tuple[str, list[str]]] = {
     "SAP SD":       ("SAP", ["sd", "sales and distribution", "sales & distribution"]),
     "SAP FI":       ("SAP", ["fi", "financial accounting"]),
     "SAP CO":       ("SAP", ["co", "controlling"]),
-    "SAP FICO":     ("SAP", ["fico"]),
+    "SAP FICO":     ("SAP", ["fico", "fi/co", "fi-co", "fi co", "sap fi/co", "sap fi-co", "sap fi co"]),
     "SAP HCM":      ("SAP", ["hcm", "human capital management"]),
     "SAP HR":       ("SAP", ["sap hr legacy"]),
     "SAP PP":       ("SAP", ["pp", "production planning"]),
@@ -192,8 +192,8 @@ SKILL_REGISTRY: dict[str, tuple[str, list[str]]] = {
     "Business Process Modeling": ("Methods & Frameworks", ["geschäftsprozessmodellierung"]),
 
     # ── Communication & Training ───────────────────────────────────────────
-    "Trainings":            ("Communication & Training", ["training"]),
-    "Schulungen":           ("Communication & Training", ["schulung"]),
+    # German/English duplicates collapsed onto a single canonical name.
+    "Trainings":            ("Communication & Training", ["training", "schulung", "schulungen"]),
     "Key User Training":    ("Communication & Training", ["key user trainings"]),
     "Workshops":            ("Communication & Training", ["workshop", "fachbereichs-workshops"]),
     "Moderation":           ("Communication & Training", ["workshop-moderation", "workshops moderieren", "moderation von workshops"]),
@@ -348,6 +348,148 @@ def count_project_evidence(canonical: str, projects: list[dict]) -> int:
                 count += 1
                 break
     return count
+
+
+# ── Blocklist: skills that should never appear in the output ───────────────
+# Things the LLM keeps emitting that aren't really trainable competencies —
+# project phases, document types, generic test labels, SAP business-process
+# names that aren't actual SAP modules. Matched case-insensitively against
+# both the raw and canonical skill name. Extend like the registry.
+BLOCKED_SKILLS: frozenset[str] = frozenset({
+    # Generic / redundant test labels (Testmanagement + UAT Testing stay)
+    "testing",
+    "ist testing",
+    "test script creation",
+    # Project phases / documents — not skills
+    "blueprint preparation",
+    "business process analysis",
+    "functional specifications",
+    "user documentation",
+    # SAP end-to-end processes — NOT SAP modules
+    "sap otc",
+    "sap p2p",
+    "sap s2p",
+    "otc",
+    "p2p",
+    "s2p",
+    # SAP business processes / domain content — NOT trainable skills.
+    # These describe WHAT the candidate worked on in projects (intercompany
+    # invoicing, third-party orders, returnable packaging), not a transferable
+    # competency. They flood the Methods & Frameworks category on SAP CVs.
+    "intercompany processes",
+    "intercompany",
+    "subcontracting",
+    "third-parties business",
+    "third-party business",
+    "returnable packaging management",
+    "returnable and non-returnable packaging management",
+    "tax determination",
+    "test plan development",
+})
+
+
+def is_blocked(name: str) -> bool:
+    """Whether this skill should be filtered out of the final output."""
+    if not name:
+        return True
+    return name.strip().lower() in BLOCKED_SKILLS
+
+
+def _is_safe_for_auto_mining(alias: str) -> bool:
+    """Whether an alias is unique enough to safely seed a skill from free
+    project text.
+
+    Short alphanumeric aliases (mm, sd, fi, co, go, r, c, ai, ml, ...) are
+    rejected because they false-positive in narrative text — e.g. "Go" matches
+    "Go-Live", "MM" matches "millimeter" mentions, "fi" matches "fi-aa" while
+    we want the canonical "SAP FI" to flag separately.
+
+    Aliases ≥4 chars OR containing non-alphanumeric characters (slash, hyphen,
+    space) are unique enough — e.g. "fico", "fi/co", "fi-co", "C++", "C#",
+    "SAP MM" all stay safe.
+    """
+    if not alias:
+        return False
+    if len(alias) > 3:
+        return True
+    return not alias.isalnum()
+
+
+def enrich_from_projects(skill_matrix: list, projects: list) -> list:
+    """Backfill registered Registry skills mentioned in project NAMES but
+    missing from skill_matrix.
+
+    Three guard rails against the noise that disabled the original miner:
+    1. Project NAMES only — descriptions are narrative text where country
+       names accidentally match language aliases ("German" in "Project
+       language: German/English") and generic verbs match method skills.
+    2. Category "Languages" is excluded entirely — spoken languages live
+       only in data.languages, never in skill_matrix from mining.
+    3. Short alphanumeric aliases are filtered (see _is_safe_for_auto_mining).
+
+    Mutates and returns the input matrix.
+    """
+    if not projects:
+        return skill_matrix or []
+
+    skill_matrix = skill_matrix or []
+
+    existing: set[str] = set()
+    for group in skill_matrix:
+        if not isinstance(group, dict):
+            continue
+        for s in group.get("skills") or []:
+            if not isinstance(s, dict):
+                continue
+            raw = (s.get("skill") or "").strip()
+            if not raw:
+                continue
+            canonical = canonical_name(raw) or raw
+            existing.add(canonical.lower())
+
+    groups_by_cat: dict[str, dict] = {
+        g["category"]: g
+        for g in skill_matrix
+        if isinstance(g, dict) and g.get("category")
+    }
+
+    # Names only — see docstring rationale (1).
+    project_names = [
+        str(p.get("name") or "").strip()
+        for p in projects
+        if isinstance(p, dict)
+    ]
+    project_names = [n for n in project_names if n]
+    if not project_names:
+        return skill_matrix
+
+    for canonical, (category, aliases) in SKILL_REGISTRY.items():
+        if canonical.lower() in existing:
+            continue
+        if category not in ALLOWED_CATEGORIES:
+            continue
+        if category == "Languages":
+            continue  # see docstring rationale (2)
+        safe = [a for a in [canonical, *aliases] if _is_safe_for_auto_mining(a)]
+        if not safe:
+            continue
+        evidence = 0
+        for name in project_names:
+            for alias in safe:
+                if _alias_pattern(alias).search(name):
+                    evidence += 1
+                    break
+        if evidence == 0:
+            continue
+        rating = rating_from_evidence(evidence)
+        if category not in groups_by_cat:
+            new_group = {"category": category, "skills": []}
+            skill_matrix.append(new_group)
+            groups_by_cat[category] = new_group
+        groups_by_cat[category]["skills"].append({"skill": canonical, "rating": rating})
+        existing.add(canonical.lower())
+
+    return skill_matrix
 
 
 def rating_from_evidence(project_count: int) -> int:

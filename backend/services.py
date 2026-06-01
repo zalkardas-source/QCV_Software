@@ -1,5 +1,6 @@
 import logging
 import os
+import re
 import sys
 import json
 import tempfile
@@ -31,6 +32,8 @@ from backend.skill_normalization import (
     SKILL_REGISTRY,
     canonical_name,
     count_project_evidence,
+    enrich_from_projects,
+    is_blocked,
     rating_from_evidence,
 )
 
@@ -266,13 +269,28 @@ def structure_cv_data(raw_markdown: str) -> dict:
        Leave a field as null ONLY when the CV truly does not contain it. Do not
        guess or fabricate values.
 
-    1. SKILLS — Extract EVERY concrete skill that appears ANYWHERE in the CV.
-       Evidence sources you MUST scan (not only the skills section!):
-       - the dedicated skills section
+    1. SKILLS — Extract the candidate's SIGNIFICANT skills. Aim for QUALITY
+       over EXHAUSTIVENESS: a candidate who lists 50 tools in a buzzword
+       section but only used 8 in real projects has 8 significant skills,
+       not 50.
+
+       A skill is significant when AT LEAST ONE of these is true:
+       - it appears in a project / job description showing the candidate
+         actually used it (STRONGEST signal — prefer these)
+       - it is a core tool of the candidate's stated specialization
+         (e.g. a SAP module for a SAP consultant, Python for a developer)
+       - it is a spoken language listed in the CV
+       - it is a named certification the candidate holds
+
+       Evidence sources to scan, in priority order:
        - every project description (tools, frameworks, methodologies actually used)
        - job titles and role descriptions
        - certifications and trainings
        - the summary / about section
+       - the dedicated skills section — use only as supplement. Skills that
+         appear ONLY here, with no project or role context, are usually
+         buzzword padding and should be skipped unless they are clearly
+         a core competency of the candidate's specialization.
 
        COMMUNICATION-RELATED SKILLS — mandatory active mining:
        Scan project descriptions and summary text for any concrete communication
@@ -306,9 +324,10 @@ def structure_cv_data(raw_markdown: str) -> dict:
                        Stakeholder Management, UAT Testing, Anforderungsanalyse
        - Communication: Workshops, Moderation, Trainings, Schulungen, Coaching,
                        Kundenkommunikation, Präsentationstechniken
-       - Languages (spoken): English, German, French, Spanish, Italian, Polish,
-                       Russian, Chinese, Portuguese, Dutch, Turkish, Arabic
        For skills NOT in this list, use the most common spelling found in the CV.
+
+       SPOKEN LANGUAGES do NOT belong in skill_matrix — extract them into the
+       separate `languages` field at the top level of the output. See Rule 7.
 
        Use these standard categories (create a new one only if truly nothing fits):
        - "Programming Languages"    (Python, Java, C#, SQL, ABAP, ...)
@@ -330,7 +349,8 @@ def structure_cv_data(raw_markdown: str) -> dict:
                                      Präsentationen, Coaching, Verhandlung,
                                      Kundenkommunikation, Wissensvermittlung,
                                      Stakeholder Management, ...)
-       - "Languages"                (English, German, French, ... — spoken languages only)
+       Note: spoken languages (English, German, ...) are NOT a skill_matrix
+       category. They go in the separate `languages` field (Rule 7).
 
        STRICT RULES for the SAP category:
        Activities that happen IN AN SAP CONTEXT but are not themselves SAP products
@@ -347,7 +367,39 @@ def structure_cv_data(raw_markdown: str) -> dict:
        Distinction: "Kommunikation" as a trained skill (moderating workshops, presenting
        to executives) → keep it under "Communication & Training". "Kommunikationsstark" or
        "kommunikativ" as a personality trait → skip.
+
+       Do NOT extract these — they are NOT trainable skills:
+       - Project phases / deliverables: "Blueprint Preparation",
+         "Business Process Analysis", "Functional Specifications",
+         "User Documentation", "Test Script Creation"
+         → these describe WORK done, not a competency. The underlying
+           competency (e.g. "Anforderungsanalyse", "Testmanagement",
+           "Technical Documentation") may be extracted if explicitly named.
+       - Generic test labels: "Testing", "IST Testing"
+         → use "UAT Testing" or "Testmanagement" only when the CV
+           actually names them.
+       - SAP end-to-end process names: "OTC", "P2P", "S2P", "SAP OTC",
+         "SAP P2P", "SAP S2P"
+         → these are business processes, not SAP modules. Map to the
+           module that actually carries them (OTC → SAP SD, P2P → SAP MM,
+           S2P → SAP MM/Ariba) when the CV indicates which module is used.
+
        Do NOT repeat the same skill in multiple categories.
+
+       CONSOLIDATE related terms in Methods & Frameworks. If the CV uses
+       multiple words for phases of the same activity, pick ONE umbrella
+       term and skip the rest. Examples:
+       - "Cutover" + "Go-Live Support" + "Rollout" + "Data Migration"
+         → these are all phases of a SAP rollout. Pick the most specific
+           one the candidate actually owned (usually "Rollout" or
+           "Data Migration"). Do NOT list 3-4 of them in parallel — that
+           inflates the matrix without adding information.
+       - "Schulungen" + "Trainings" → ONE of them, not both (the registry
+         already aliases them, but don't emit both).
+       - "Workshops" + "Workshop-Moderation" → "Moderation" or "Workshops",
+         not both.
+       Rule of thumb: if removing one term would not lose information about
+       the candidate's competency, do not emit it.
 
     2. RATINGS — Project evidence is the ground truth. Before assigning a rating,
        count how many projects mention the skill and how central it is in each.
@@ -403,6 +455,20 @@ def structure_cv_data(raw_markdown: str) -> dict:
        - "2020-present" → use 2026 as the current year
        - "6 months" → 0 (round down) or 1 (round up); prefer the closest integer
        Null if no durations are available.
+
+    7. LANGUAGES — Extract every spoken language listed in the CV into the
+       top-level `languages` field. Each entry has:
+       - `name`: the language in English (English, German, French, Spanish,
+         Russian, Mandarin, Polish, Italian, Portuguese, Dutch, Turkish,
+         Arabic, Japanese, ...).
+       - `level`: one of "native", "fluent", "good", "basic", or null.
+         Map common CV phrasing:
+         - "Muttersprache" / "mother tongue" / "native"            → "native"
+         - "verhandlungssicher" / "C1" / "C2" / "business-fluent"  → "fluent"
+         - "gut" / "fortgeschritten" / "B1" / "B2"                 → "good"
+         - "Grundkenntnisse" / "A1" / "A2"                         → "basic"
+         If the CV gives no level, set `level` to null — do NOT guess.
+       Languages must NOT also appear in skill_matrix.
 
     6. FORMAT — No preamble, no markdown fences, raw JSON only.
     """
@@ -480,31 +546,43 @@ def structure_cv_data(raw_markdown: str) -> dict:
             logger.info("[COMM_SKILLS] from extractor (%d): %s",
                         len(comm_skills), comm_skills)
 
-            # Second pass: scan the CV again to mine project-evidence skills
-            # that the initial extractor missed. Fail-safe → empty list.
-            mined_matrix = _mine_project_skills(raw_markdown, initial_dict)
-            mined_names = sorted({
-                name for name, _, _ in _flatten_skills(mined_matrix)
-            }, key=str.lower)
-            logger.info("[SKILLS] Derived from projects (%d): %s",
-                        len(mined_names), mined_names)
+            # Miner pass intentionally disabled — on real-world CVs it added
+            # 20-60 "skills" inconsistently between runs (over-extracting
+            # project activities like "Tax Determination", "Test Plan
+            # Development", "Returnable Packaging Management"). That alone
+            # blew the consistency goal. The deterministic registry layer
+            # below catches the spelling/category drift that mattered, so we
+            # don't need the miner's recall boost on top.
+            # The _mine_project_skills + _fuse_skills functions stay in the
+            # module — re-enable here if a future change makes them safe.
+            logger.info("[SKILLS] Miner pass skipped (disabled for consistency)")
 
-            initial_dict["skill_matrix"] = _fuse_skills(
-                initial_dict.get("skill_matrix", []), mined_matrix
+            # Reviewer pass intentionally disabled — same problem as the miner.
+            # It re-extracted project phases ("Blueprint Preparation"),
+            # documents ("Functional Specifications"), and SAP end-to-end
+            # process names ("SAP OTC/P2P/S2P") as "skills", adding 25-30
+            # noise items on every run. review_cv_data stays in the module.
+            reviewed = initial_dict
+            logger.info("[REVIEW] Reviewer pass skipped (disabled for consistency)")
+
+            # Fallback: if the LLM ignored Rule 7 and emitted spoken languages
+            # as skill_matrix entries (category=Languages), migrate them into
+            # the dedicated `languages` field. Deterministic safety net.
+            reviewed["skill_matrix"], migrated_languages = _split_off_languages(
+                reviewed.get("skill_matrix", [])
             )
-            pre_reviewer_names = sorted({
-                name for name, _, _ in _flatten_skills(initial_dict["skill_matrix"])
-            }, key=str.lower)
-            logger.info("[SKILLS] After fusion, before reviewer (%d): %s",
-                        len(pre_reviewer_names), pre_reviewer_names)
-
-            # Third pass: QA review (fail-safe: returns input on reviewer failure)
-            reviewed = review_cv_data(raw_markdown, initial_dict)
-            post_reviewer_names = sorted({
-                name for name, _, _ in _flatten_skills(reviewed.get("skill_matrix", []))
-            }, key=str.lower)
-            logger.info("[SKILLS] After reviewer (%d): %s",
-                        len(post_reviewer_names), post_reviewer_names)
+            if migrated_languages:
+                existing = reviewed.get("languages") or []
+                # Merge case-insensitively; LLM-emitted entries from Rule 7 win.
+                seen = {(e.get("name") or "").strip().lower() for e in existing}
+                for entry in migrated_languages:
+                    key = (entry.get("name") or "").strip().lower()
+                    if key and key not in seen:
+                        existing.append(entry)
+                        seen.add(key)
+                reviewed["languages"] = existing
+                logger.info("[LANGUAGES] Migrated %d entries from skill_matrix → languages",
+                            len(migrated_languages))
 
             # Deterministic post-process: code-based category overrides eliminate
             # the main source of run-to-run drift (LLM mis-categorizing known skills).
@@ -514,6 +592,22 @@ def structure_cv_data(raw_markdown: str) -> dict:
             }, key=str.lower)
             logger.info("[SKILLS] After category overrides (%d): %s",
                         len(final_names), final_names)
+
+            # Defensive enrichment: backfill Registry skills mentioned in
+            # project text but missed by the LLM extractor. Uses a stricter
+            # alias filter than the old _mine_project_skills — short
+            # alphanumeric codes (mm, sd, fi, co, go) are skipped to avoid
+            # false-positives like "Go" matching "Go-Live". Aliases with
+            # punctuation (fi/co, fi-co) and ≥4-char names (fico, SAP MM)
+            # stay active because they're unique enough.
+            before_enrich = {name for name, _, _ in _flatten_skills(reviewed["skill_matrix"])}
+            reviewed["skill_matrix"] = enrich_from_projects(
+                reviewed["skill_matrix"], reviewed.get("projects", [])
+            )
+            after_enrich = {name for name, _, _ in _flatten_skills(reviewed["skill_matrix"])}
+            added = sorted(after_enrich - before_enrich, key=str.lower)
+            if added:
+                logger.info("[SKILLS] Enriched from projects (%d): %s", len(added), added)
 
             # Deterministic rating recomputation: for every recognized skill,
             # the rating is now a pure function of how many projects mention it.
@@ -526,6 +620,25 @@ def structure_cv_data(raw_markdown: str) -> dict:
                 for name, _, rating in _flatten_skills(reviewed["skill_matrix"])
             ]
             logger.info("[SKILLS] After rating recompute: %s", ratings_summary)
+
+            # Specialization boost: skills the candidate names in their own
+            # summary get sorting priority during compaction. Solves the
+            # alphabetical-tiebreaker bug where S/4HANA was dropping out of
+            # SAP-MM/SD CVs while DBM/LO-VC survived.
+            boosted = _extract_specialization_skills(reviewed.get("small_summary") or "")
+            if boosted:
+                logger.info("[SKILLS] Specialization boost from summary (%d): %s",
+                            len(boosted), sorted(boosted))
+
+            # Compaction: drop low-rated noise + cap each category. Runs on the
+            # deterministic ratings, not LLM ratings, so the top-N is honest.
+            reviewed["skill_matrix"] = _compact_skill_matrix(reviewed["skill_matrix"], boosted)
+            compacted_names = [
+                (name, rating)
+                for name, _, rating in _flatten_skills(reviewed["skill_matrix"])
+            ]
+            logger.info("[SKILLS] After compaction (%d): %s",
+                        len(compacted_names), compacted_names)
 
             # Final summary as it will be stored — useful for verifying the
             # 2-4-sentence + top-skills format actually landed.
@@ -556,6 +669,18 @@ def structure_cv_data(raw_markdown: str) -> dict:
 # Module-level alias kept for backward-compat with code/tests that imported this.
 # The canonical list now lives in backend.skill_normalization.
 _ALLOWED_CATEGORIES = ALLOWED_CATEGORIES
+
+# Per-category cap applied after sort. Trades coverage for compactness — see
+# Rule 1 ("QUALITY over EXHAUSTIVENESS") in structure_cv_data's prompt.
+MAX_SKILLS_PER_CATEGORY = 5
+
+# Skills below this rating are dropped during compaction. Rating 4 means the
+# skill has zero project evidence (see rating_from_evidence) — i.e. it's a
+# buzzword-listing without proof, which is exactly what bloats the matrix.
+# No category is exempt anymore — spoken languages live in their own field
+# (`languages`) now, see Rule 7 in structure_cv_data's prompt.
+MIN_RATING = 5
+COMPACTION_EXEMPT_CATEGORIES: frozenset[str] = frozenset()
 
 
 def _normalize_sap_skill(name: str) -> str | None:
@@ -595,6 +720,12 @@ def _apply_category_overrides(skill_matrix: list) -> list:
             target_name = name
             target_category = category
 
+        # Drop blocked skills: project phases, generic test labels, SAP
+        # end-to-end process names, etc. Check both the raw and the canonical
+        # form so we catch every variant.
+        if is_blocked(name) or is_blocked(target_name):
+            continue
+
         if target_category not in ALLOWED_CATEGORIES:
             continue
 
@@ -620,6 +751,104 @@ def _apply_category_overrides(skill_matrix: list) -> list:
         for cat in ALLOWED_CATEGORIES
         if grouped[cat]
     ]
+
+
+def _extract_specialization_skills(summary: str) -> set[str]:
+    """Find which canonical Registry skills are mentioned in the candidate's own
+    summary. These are the skills the candidate considers core to their value
+    proposition — they get priority during compaction sorting and survive the
+    MIN_RATING filter.
+
+    Deterministic string matching: scans the summary case-insensitively for
+    every canonical skill name and every alias. No second LLM call needed.
+    Word-boundary check (`re.search(rf"\b{...}\b", ...)`) prevents false hits
+    like "SAP" inside "SAPpiness" — purely defensive; unlikely in practice.
+    """
+    if not summary:
+        return set()
+    lower = summary.lower()
+    boosted: set[str] = set()
+    for canonical, (_cat, aliases) in SKILL_REGISTRY.items():
+        terms = [canonical] + list(aliases)
+        for t in terms:
+            t_lower = t.lower().strip()
+            if not t_lower:
+                continue
+            # Word-boundary on alphanumerics; punctuation like "/" or "-"
+            # in canonical names (e.g. "SAP S/4HANA") is preserved verbatim.
+            if re.search(rf"(?<![A-Za-z0-9]){re.escape(t_lower)}(?![A-Za-z0-9])", lower):
+                boosted.add(canonical)
+                break
+    return boosted
+
+
+def _split_off_languages(skill_matrix: list) -> tuple[list, list[dict]]:
+    """Pull any Languages-category entries out of skill_matrix into a separate
+    list of {name, level} dicts. Returns (cleaned_matrix, language_entries).
+
+    Defensive fallback for Rule 7: spoken languages should arrive in the
+    top-level `languages` field, but if the LLM still emits them as skills
+    (category="Languages"), we migrate them here so the UI doesn't show
+    "English: 8/10".
+    """
+    cleaned: list = []
+    languages: list[dict] = []
+    for group in skill_matrix or []:
+        if not isinstance(group, dict):
+            continue
+        if (group.get("category") or "") == "Languages":
+            for s in group.get("skills", []) or []:
+                if not isinstance(s, dict):
+                    continue
+                name = (s.get("skill") or "").strip()
+                if name:
+                    languages.append({"name": name, "level": None})
+        else:
+            cleaned.append(group)
+    return cleaned, languages
+
+
+def _compact_skill_matrix(skill_matrix: list, boosted: set[str] | None = None) -> list:
+    """Final compaction step. Run AFTER rating recomputation so ratings reflect
+    project evidence, not LLM jitter. For every category:
+
+    1. Drop skills below MIN_RATING (= no project evidence), UNLESS the skill
+       is in `boosted` (= mentioned in the candidate's own summary, so it
+       represents claimed specialization and must survive).
+    2. Sort: boosted skills first, then rating desc, then name.
+    3. Cap to MAX_SKILLS_PER_CATEGORY.
+
+    `boosted` carries the set of canonical skill names that appeared in the
+    summary — see `_extract_specialization_skills`. Without it, the sort
+    falls back to rating + alphabetical (the old behavior).
+    """
+    boosted = boosted or set()
+    out: list = []
+    for group in skill_matrix or []:
+        if not isinstance(group, dict):
+            continue
+        category = group.get("category") or ""
+        skills = list(group.get("skills", []) or [])
+
+        if category not in COMPACTION_EXEMPT_CATEGORIES:
+            skills = [
+                s for s in skills
+                if int(s.get("rating") or 0) >= MIN_RATING
+                or (s.get("skill") or "") in boosted
+            ]
+
+        # Sort key: boosted first (sort-rank 0 vs 1), then rating desc, then name.
+        skills.sort(key=lambda s: (
+            0 if (s.get("skill") or "") in boosted else 1,
+            -int(s.get("rating") or 0),
+            (s.get("skill") or "").lower(),
+        ))
+        skills = skills[:MAX_SKILLS_PER_CATEGORY]
+
+        if skills:
+            out.append({"category": category, "skills": skills})
+
+    return out
 
 
 def _recompute_ratings_from_evidence(skill_matrix: list, projects: list) -> list:

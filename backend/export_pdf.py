@@ -12,10 +12,10 @@ _YEAR_RE = re.compile(r"\b(?:19|20)\d{2}\b")
 _SENTENCE_BOUNDARY = re.compile(r"(?<=[.!?])\s+")
 
 # One-pager constraints (landscape A4, must fit one page).
+# Project descriptions are intentionally NOT truncated — five full
+# descriptions fill the bottom half of the page (Quatelio house style).
 _ONEPAGER_MAX_PROJECTS = 5
 _ONEPAGER_SUMMARY_SENTENCES = 4     # fills the middle-column gap under the name
-_ONEPAGER_PROJECT_DESC_SENTENCES = 2
-_ONEPAGER_PROJECT_DESC_MAX_CHARS = 200
 _MIN_RATING_FOR_PDF = 8             # skills block: only ratings 8+ unless boosted
 _MAX_SKILLS_PER_CATEGORY = 4        # tighter pitch: top 4 per category
 _MAX_TOTAL_SKILLS = 12              # hard cap across all categories
@@ -74,21 +74,6 @@ def _short_summary(text: str, max_sentences: int) -> str:
         return ""
     sentences = _SENTENCE_BOUNDARY.split(text.strip())
     return " ".join(sentences[:max_sentences]).strip()
-
-
-def _trim_project_description(text: str) -> str:
-    """Trim a project description for the one-pager: first N sentences,
-    then a hard char cap on a word boundary, with ellipsis if truncated.
-    """
-    if not text:
-        return ""
-    short = _short_summary(text, _ONEPAGER_PROJECT_DESC_SENTENCES)
-    if len(short) <= _ONEPAGER_PROJECT_DESC_MAX_CHARS:
-        return short
-    cut = short[:_ONEPAGER_PROJECT_DESC_MAX_CHARS]
-    if " " in cut:
-        cut = cut.rsplit(" ", 1)[0]
-    return cut.rstrip(",.;: ") + "…"
 
 
 def _make_initials(full_name: str) -> str:
@@ -162,7 +147,7 @@ def _prepare_context(data: dict) -> dict:
         {
             "name": p.get("name", ""),
             "context": (p.get("industry") or p.get("location") or "").strip(),
-            "description": _trim_project_description(p.get("description") or ""),
+            "description": (p.get("description") or "").strip(),
         }
         for p in top_projects
     ]

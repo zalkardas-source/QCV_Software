@@ -44,6 +44,17 @@ class Project(BaseModel):
     industry: Optional[str] = Field(default=None, description="Industry/sector of the client or project (e.g. Pharma, Automotive, Banking, Retail, Manufacturing, Telco, Public Sector). One or two words, English.")
     location: Optional[str] = Field(default=None, description="Country or city where the project/role was located (e.g. 'Germany', 'Berlin', 'Remote'). Used as a fallback when industry is unclear.")
 
+
+# Allowed values for spoken-language proficiency. Keep the set small so the
+# Word/PDF export looks uniform across candidates.
+LanguageLevel = Literal["native", "fluent", "good", "basic"]
+
+
+class LanguageEntry(BaseModel):
+    name: str = Field(description="The spoken language, in English. Examples: English, German, French, Spanish, Russian, Mandarin, Polish, Italian, Portuguese, Dutch, Turkish, Arabic, Japanese.")
+    level: Optional[LanguageLevel] = Field(default=None, description="Proficiency level, normalized to one of: native, fluent, good, basic. Map common CV phrasing: 'Muttersprache' / 'native speaker' → native; 'verhandlungssicher' / 'C1' / 'C2' / 'business-fluent' → fluent; 'gut' / 'B1' / 'B2' → good; 'Grundkenntnisse' / 'A1' / 'A2' → basic. If the CV gives no level, leave null.")
+
+
 class CVData(BaseModel):
     """
     The main schema for the CV extraction.
@@ -52,5 +63,6 @@ class CVData(BaseModel):
     personal_information: PersonalInformation = Field(description="Core personal details")
     small_summary: Optional[str] = Field(default=None, description="Professional summary, 4-6 sentences. Sentence 1-2: role, years of experience, focus area. Sentence 3-4: natural-language mention of the 3-5 strongest skills (mix of technical, methodological, and communication skills) drawn from skill_matrix. Sentence 5-6: industry exposure, project types, geographic scope. Be factual, no marketing language.")
     total_experience_years: Optional[int] = Field(default=None, description="Total years of professional work experience, computed by summing project durations. Null if not derivable.")
-    skill_matrix: List[SkillGroup] = Field(default_factory=list, description="Categorized list of skills")
+    skill_matrix: List[SkillGroup] = Field(default_factory=list, description="Categorized list of skills. Do NOT include spoken languages here — those go into the separate `languages` field.")
+    languages: List[LanguageEntry] = Field(default_factory=list, description="Spoken languages with proficiency level. Separate from skill_matrix because spoken languages are competencies of a different kind — they have a level (native/fluent/...), not a 1-10 rating.")
     projects: List[Project] = Field(default_factory=list, description="List of work experiences or projects")

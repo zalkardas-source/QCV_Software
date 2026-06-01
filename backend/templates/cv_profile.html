@@ -33,47 +33,20 @@
         gap: 6mm;
         margin-bottom: 4mm;
     }
+    /* No-photo variant: identity absorbs the photo's space, skills stays right. */
+    .top.top--no-photo {
+        grid-template-columns: 140mm 1fr;
+    }
 
-    /* Column 1: Photo + Languages */
+    /* Column 1: Photo (rendered only when a photo is available) */
     .photo-col {
         text-align: center;
     }
-    .hero-photo,
-    .hero-initials {
+    .hero-photo {
         width: 42mm;
         height: 52mm;
         object-fit: cover;
         border: 0.3mm solid #d1d5db;
-    }
-    .hero-initials {
-        background: #00569c;
-        color: white;
-        font-size: 22pt;
-        font-weight: bold;
-        letter-spacing: 0.5pt;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-    }
-    .photo-col .languages-block {
-        text-align: left;
-        margin-top: 3mm;
-        max-width: 42mm;
-        margin-left: auto;
-        margin-right: auto;
-    }
-    .photo-col .section-title {
-        margin-top: 0;
-        margin-bottom: 1.5mm;
-    }
-    .language-row {
-        font-size: 8pt;
-        color: #1e1e23;
-        margin-bottom: 0.5mm;
-        line-height: 1.35;
-    }
-    .lang-level {
-        color: #94a3b8;
     }
 
     /* Column 2: Identity + summary */
@@ -205,23 +178,13 @@
 </head>
 <body>
 
-<div class="top">
+<div class="top{% if not photo_data_url %} top--no-photo{% endif %}">
 
+    {% if photo_data_url %}
     <div class="photo-col">
-        {% if photo_data_url %}
         <img class="hero-photo" src="{{ photo_data_url }}" alt="{{ full_name }}">
-        {% else %}
-        <div class="hero-initials">{{ initials }}</div>
-        {% endif %}
-        {% if languages %}
-        <div class="languages-block">
-            <div class="section-title">Languages</div>
-            {% for lang in languages %}
-            <div class="language-row">{{ lang.name }}{% if lang.level %} <span class="lang-level">({{ lang.level }})</span>{% endif %}</div>
-            {% endfor %}
-        </div>
-        {% endif %}
     </div>
+    {% endif %}
 
     <div class="identity-col">
         <div class="identity-name">{{ full_name }}</div>
@@ -235,7 +198,7 @@
     </div>
 
     <div class="skills-col">
-        {% if skill_matrix %}
+        {% if skill_matrix or languages %}
         <div class="section-title">Skills</div>
         <div class="skills">
             {% for group in skill_matrix %}
@@ -252,6 +215,16 @@
                 {% endfor %}
             </div>
             {% endfor %}
+            {% if languages %}
+            <div class="skill-group">
+                <div class="skill-group-name">Languages</div>
+                {% for lang in languages %}
+                <div class="skill-row">
+                    <span class="name">{{ lang.name }}{% if lang.level %} <span style="color:#94a3b8">({{ lang.level }})</span>{% endif %}</span>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
         </div>
         {% endif %}
     </div>

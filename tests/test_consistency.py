@@ -30,10 +30,12 @@ import pytest
 from backend import services
 from backend.skill_normalization import (
     ALLOWED_CATEGORIES,
+    BLOCKED_SKILLS,
     SKILL_REGISTRY,
     canonical_name,
     category_for,
     count_project_evidence,
+    is_blocked,
     rating_from_evidence,
 )
 
@@ -63,8 +65,10 @@ from backend.skill_normalization import (
     ("Workshops moderieren",   "Moderation"),
     ("Moderation von Workshops", "Moderation"),
     ("Workshop-Moderation",    "Moderation"),
+    # Trainings and Schulungen collapse to a single canonical name
     ("training",               "Trainings"),
-    ("Schulung",               "Schulungen"),
+    ("Schulung",               "Trainings"),
+    ("Schulungen",             "Trainings"),
     ("Datenmigration",         "Data Migration"),
     ("data migration",         "Data Migration"),
     ("Projektmanagement",      "Projektmanagement"),
@@ -177,6 +181,75 @@ def test_rating_mapping(count, expected):
     assert rating_from_evidence(count) == expected
 
 
+# ── Unit tests: blocklist ──────────────────────────────────────────────────
+
+@pytest.mark.parametrize("name", [
+    "Testing", "testing", "  testing  ",
+    "IST Testing", "Test Script Creation",
+    "Blueprint Preparation", "Business Process Analysis",
+    "Functional Specifications", "User Documentation",
+    "SAP OTC", "SAP P2P", "SAP S2P",
+    "OTC", "P2P", "S2P",
+])
+def test_is_blocked_true_for_known_noise(name):
+    assert is_blocked(name) is True
+
+
+@pytest.mark.parametrize("name", [
+    "SAP MM", "Testmanagement", "UAT Testing",
+    "Python", "Excel", "Workshops", "Trainings",
+])
+def test_is_blocked_false_for_real_skills(name):
+    assert is_blocked(name) is False
+
+
+def test_blocked_skills_are_filtered_out():
+    """Skills in BLOCKED_SKILLS disappear after _apply_category_overrides."""
+    matrix = [
+        {"category": "Methods & Frameworks", "skills": [
+            {"skill": "Blueprint Preparation",   "rating": 8},
+            {"skill": "Business Process Analysis", "rating": 7},
+            {"skill": "Testing",                 "rating": 9},
+            {"skill": "UAT Testing",             "rating": 8},
+            {"skill": "Testmanagement",          "rating": 7},
+        ]},
+        {"category": "SAP", "skills": [
+            {"skill": "SAP OTC", "rating": 9},
+            {"skill": "SAP P2P", "rating": 9},
+            {"skill": "SAP MM",  "rating": 8},
+        ]},
+    ]
+    out = services._apply_category_overrides(matrix)
+    flat_names = {name for name, _, _ in services._flatten_skills(out)}
+    # Blocked items gone
+    assert "Blueprint Preparation" not in flat_names
+    assert "Business Process Analysis" not in flat_names
+    assert "Testing" not in flat_names
+    assert "SAP OTC" not in flat_names
+    assert "SAP P2P" not in flat_names
+    # Real skills survive
+    assert "UAT Testing" in flat_names
+    assert "Testmanagement" in flat_names
+    assert "SAP MM" in flat_names
+
+
+def test_trainings_and_schulungen_collapse_to_one():
+    """The German/English duplicate must end up as a single Trainings entry."""
+    matrix = [
+        {"category": "Communication & Training", "skills": [
+            {"skill": "Trainings",  "rating": 7},
+            {"skill": "Schulungen", "rating": 8},
+            {"skill": "Schulung",   "rating": 5},
+            {"skill": "training",   "rating": 6},
+        ]},
+    ]
+    out = services._apply_category_overrides(matrix)
+    flat_names = [name for name, _, _ in services._flatten_skills(out)]
+    assert flat_names.count("Trainings") == 1
+    assert "Schulungen" not in flat_names
+    assert "Schulung" not in flat_names
+
+
 # ── Unit tests: _apply_category_overrides (services-level) ─────────────────
 
 def test_overrides_normalize_spelling_variants():
@@ -249,6 +322,129 @@ def test_overrides_drop_unknown_category():
     flat_names = [name for name, _, _ in services._flatten_skills(out)]
     assert "Leadership" not in flat_names
     assert "Python" in flat_names
+
+
+def test_compact_caps_each_category_at_max():
+    """A bloated category is capped to MAX_SKILLS_PER_CATEGORY (highest-rated wins)."""
+    cap = services.MAX_SKILLS_PER_CATEGORY
+    # Build cap + 5 unique tools, all rated above MIN_RATING so the cap (not
+    # the threshold) is what limits the count.
+    overflow = [
+        {"skill": f"FakeTool{i}", "rating": 9 - (i % 4)}  # ratings 6-9
+        for i in range(cap + 5)
+    ]
+    matrix = [{"category": "Tools & Platforms", "skills": overflow}]
+    out = services._compact_skill_matrix(matrix)
+    tools = next(g for g in out if g["category"] == "Tools & Platforms")
+    assert len(tools["skills"]) == cap
+    ratings = [s["rating"] for s in tools["skills"]]
+    assert ratings == sorted(ratings, reverse=True)
+
+
+def test_compact_drops_skills_below_min_rating():
+    """Skills with rating < MIN_RATING are dropped (= claim-only buzzword padding)."""
+    matrix = [{"category": "Tools & Platforms", "skills": [
+        {"skill": "Real Tool",  "rating": services.MIN_RATING},      # keep
+        {"skill": "Strong",     "rating": 8},                         # keep
+        {"skill": "Padding A",  "rating": services.MIN_RATING - 1},  # drop
+        {"skill": "Padding B",  "rating": 1},                         # drop
+    ]}]
+    out = services._compact_skill_matrix(matrix)
+    names = [s["skill"] for s in out[0]["skills"]]
+    assert "Strong" in names
+    assert "Real Tool" in names
+    assert "Padding A" not in names
+    assert "Padding B" not in names
+
+
+def test_split_off_languages_migrates_languages_category():
+    """Spoken languages emitted as skill_matrix entries are migrated to the
+    dedicated `languages` field (defensive fallback if the LLM ignores Rule 7)."""
+    matrix = [
+        {"category": "Programming Languages", "skills": [{"skill": "Python", "rating": 8}]},
+        {"category": "Languages", "skills": [
+            {"skill": "English", "rating": 4},
+            {"skill": "German",  "rating": 4},
+        ]},
+    ]
+    cleaned, languages = services._split_off_languages(matrix)
+    # Languages group is gone from skill_matrix
+    assert [g["category"] for g in cleaned] == ["Programming Languages"]
+    # Migrated into the new field, level defaults to None
+    assert languages == [
+        {"name": "English", "level": None},
+        {"name": "German",  "level": None},
+    ]
+
+
+def test_split_off_languages_passthrough_when_none_present():
+    """No Languages-category entries → matrix passes through unchanged, no migrations."""
+    matrix = [{"category": "Programming Languages", "skills": [{"skill": "Python", "rating": 8}]}]
+    cleaned, languages = services._split_off_languages(matrix)
+    assert cleaned == matrix
+    assert languages == []
+
+
+def test_extract_specialization_finds_canonical_skills_in_summary():
+    """Skills named in the summary are returned by canonical name, via alias too."""
+    summary = (
+        "Senior SAP Functional Consultant specializing in SAP MM/SD rollouts "
+        "and S/4HANA migrations. Strong in data migration and project management."
+    )
+    boosted = services._extract_specialization_skills(summary)
+    assert "SAP MM" in boosted
+    assert "SAP SD" in boosted
+    assert "SAP S/4HANA" in boosted
+    assert "Data Migration" in boosted
+    assert "Projektmanagement" in boosted  # via "project management" alias
+    assert "Rollout" in boosted             # via "rollouts" alias
+
+
+def test_extract_specialization_handles_empty_summary():
+    assert services._extract_specialization_skills("") == set()
+    assert services._extract_specialization_skills(None) == set()
+
+
+def test_compact_boost_keeps_specialization_skill_when_tied_on_rating():
+    """When several SAP modules tie on rating, a boosted one beats the alphabetical
+    tiebreaker. Regression guard for the 'S/4HANA dropped while DBM survived' bug."""
+    matrix = [{"category": "SAP", "skills": [
+        {"skill": "SAP DBM",      "rating": 7},
+        {"skill": "SAP LO-VC",    "rating": 7},
+        {"skill": "SAP S/4HANA",  "rating": 7},
+        {"skill": "SAP MM",       "rating": 8},
+        {"skill": "SAP SD",       "rating": 8},
+        {"skill": "SAP Fiori",    "rating": 6},
+        {"skill": "SAP CA-CL",    "rating": 6},
+    ]}]
+    # Without boost, alphabetical tiebreaker would pick DBM and LO-VC over S/4HANA.
+    out = services._compact_skill_matrix(matrix, boosted={"SAP S/4HANA"})
+    names = [s["skill"] for s in out[0]["skills"]]
+    assert "SAP S/4HANA" in names
+    assert names[0] == "SAP S/4HANA"  # boosted goes to the very top
+
+
+def test_compact_boost_overrides_min_rating():
+    """A boosted skill survives even when its rating is below MIN_RATING.
+    Reason: if the candidate explicitly named it in their summary, it's
+    claimed specialization, not buzzword padding."""
+    matrix = [{"category": "Communication & Training", "skills": [
+        {"skill": "Präsentationstechniken", "rating": 4},  # below MIN_RATING
+        {"skill": "Workshops",              "rating": 8},
+    ]}]
+    out = services._compact_skill_matrix(matrix, boosted={"Präsentationstechniken"})
+    names = [s["skill"] for s in out[0]["skills"]]
+    assert "Präsentationstechniken" in names
+
+
+def test_compact_drops_empty_category():
+    """A category whose skills are all below MIN_RATING disappears entirely."""
+    matrix = [{"category": "Tools & Platforms", "skills": [
+        {"skill": "Weak A", "rating": 2},
+        {"skill": "Weak B", "rating": 3},
+    ]}]
+    out = services._compact_skill_matrix(matrix)
+    assert out == []
 
 
 # ── Unit tests: _recompute_ratings_from_evidence ───────────────────────────
@@ -414,7 +610,7 @@ def test_structure_cv_data_is_consistent_across_runs(capsys):
         runs.append(result)
         print(f"\n=== Run {i+1} skills ({len(_flat_skill_dict(result))}) ===")
         for name, (cat, rating) in sorted(_flat_skill_dict(result).items()):
-            print(f"  [{cat:30}] {name:30} → {rating}")
+            print(f"  [{cat:30}] {name:30} -> {rating}")
 
     report = _consistency_report(runs)
     print("\n=== Consistency report ===")

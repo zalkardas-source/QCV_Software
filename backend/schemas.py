@@ -1,5 +1,22 @@
 from pydantic import BaseModel, Field
-from typing import List, Optional
+from typing import List, Literal, Optional
+
+# Single source of truth for allowed skill categories. The Literal below makes
+# Pydantic reject any other value at validation time, so a drifted LLM output
+# triggers the self-healing retry loop instead of silently storing a bogus
+# category.
+SkillCategory = Literal[
+    "Programming Languages",
+    "Frameworks & Libraries",
+    "Databases",
+    "Tools & Platforms",
+    "SAP",
+    "Data & Analytics",
+    "Methods & Frameworks",
+    "Communication & Training",
+    "Languages",
+]
+
 
 class PersonalInformation(BaseModel):
     full_name: str = Field(description="The full name of the candidate. If not found, output 'Unknown Name'")
@@ -17,13 +34,26 @@ class Skill(BaseModel):
     rating: int = Field(default=4, description="Numeric rating 1-10 based on evidence in the CV. See rating rules.")
 
 class SkillGroup(BaseModel):
-    category: str = Field(description="Category of the skills. Use standard names: Programming Languages, Frameworks & Libraries, Databases, Tools & Platforms, SAP, Data & Analytics, Languages.")
+    category: SkillCategory = Field(description="Category of the skills. Must be one of the nine allowed values.")
     skills: List[Skill] = Field(description="List of skills within this category")
 
 class Project(BaseModel):
     name: str = Field(description="Name of the project, job title, or role")
     description: Optional[str] = Field(default=None, description="Description of responsibilities or achievements")
     duration: Optional[str] = Field(default=None, description="Duration or dates of the project/experience")
+    industry: Optional[str] = Field(default=None, description="Industry/sector of the client or project (e.g. Pharma, Automotive, Banking, Retail, Manufacturing, Telco, Public Sector). One or two words, English.")
+    location: Optional[str] = Field(default=None, description="Country or city where the project/role was located (e.g. 'Germany', 'Berlin', 'Remote'). Used as a fallback when industry is unclear.")
+
+
+# Allowed values for spoken-language proficiency. Keep the set small so the
+# Word/PDF export looks uniform across candidates.
+LanguageLevel = Literal["native", "fluent", "good", "basic"]
+
+
+class LanguageEntry(BaseModel):
+    name: str = Field(description="The spoken language, in English. Examples: English, German, French, Spanish, Russian, Mandarin, Polish, Italian, Portuguese, Dutch, Turkish, Arabic, Japanese.")
+    level: Optional[LanguageLevel] = Field(default=None, description="Proficiency level, normalized to one of: native, fluent, good, basic. Map common CV phrasing: 'Muttersprache' / 'native speaker' → native; 'verhandlungssicher' / 'C1' / 'C2' / 'business-fluent' → fluent; 'gut' / 'B1' / 'B2' → good; 'Grundkenntnisse' / 'A1' / 'A2' → basic. If the CV gives no level, leave null.")
+
 
 class CVData(BaseModel):
     """
@@ -31,7 +61,8 @@ class CVData(BaseModel):
     The order here dictates how the JSON is structured.
     """
     personal_information: PersonalInformation = Field(description="Core personal details")
-    small_summary: Optional[str] = Field(default=None, description="A short professional summary or objective of the candidate")
+    small_summary: Optional[str] = Field(default=None, description="Professional summary, 4-6 sentences. Sentence 1-2: role, years of experience, focus area. Sentence 3-4: natural-language mention of the 3-5 strongest skills (mix of technical, methodological, and communication skills) drawn from skill_matrix. Sentence 5-6: industry exposure, project types, geographic scope. Be factual, no marketing language.")
     total_experience_years: Optional[int] = Field(default=None, description="Total years of professional work experience, computed by summing project durations. Null if not derivable.")
-    skill_matrix: List[SkillGroup] = Field(default_factory=list, description="Categorized list of skills")
+    skill_matrix: List[SkillGroup] = Field(default_factory=list, description="Categorized list of skills. Do NOT include spoken languages here — those go into the separate `languages` field.")
+    languages: List[LanguageEntry] = Field(default_factory=list, description="Spoken languages with proficiency level. Separate from skill_matrix because spoken languages are competencies of a different kind — they have a level (native/fluent/...), not a 1-10 rating.")
     projects: List[Project] = Field(default_factory=list, description="List of work experiences or projects")

@@ -18,7 +18,6 @@ const loginView = document.getElementById('loginView');
 const headerActions = document.getElementById('headerActions');
 const jsonEditor = document.getElementById('jsonEditor');
 const btnSaveDB = document.getElementById('btnSaveDB');
-const btnGeneratePPTX = document.getElementById('btnGeneratePPTX');
 const btnGeneratePDF = document.getElementById('btnGeneratePDF');
 const navDashboardBtn = document.getElementById('navDashboardBtn');
 const navUploadBtn = document.getElementById('navUploadBtn');
@@ -163,7 +162,66 @@ function handleFiles(files) {
     }
 }
 
-// ── Single Upload & Parse ───────────────────────────────────────
+// ── Avatar rendering with async photo hydration ─────────────────
+// Renders the initials immediately so there's never a blank slot, then
+// hydrateAvatars() swaps in the real photo once the authenticated fetch
+// resolves. Falling back to initials when no photo is stored is automatic
+// — the API returns 404 and the initials stay.
+function avatarHtml(cv, sizeClasses = 'w-7 h-7') {
+    const name = cv.name || '??';
+    const initials = name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+    if (cv.has_photo) {
+        return `<span class="avatar-slot ${sizeClasses} rounded-full overflow-hidden inline-flex items-center justify-center bg-brand-light text-brand-blue text-xs font-bold flex-shrink-0" data-cv-photo="${cv.id}">${initials}</span>`;
+    }
+    return `<span class="${sizeClasses} rounded-full bg-brand-light text-brand-blue inline-flex items-center justify-center text-xs font-bold flex-shrink-0">${initials}</span>`;
+}
+
+async function hydrateAvatars() {
+    const slots = document.querySelectorAll('.avatar-slot[data-cv-photo]:not(.hydrated)');
+    console.log('[avatars] hydrating', slots.length, 'slot(s)');
+    for (const slot of slots) {
+        slot.classList.add('hydrated');
+        const cvId = slot.dataset.cvPhoto;
+        try {
+            const r = await fetch(`${API_BASE}/cvs/${cvId}/photo`, {
+                headers: { Authorization: `Bearer ${authToken}` }
+            });
+            console.log('[avatars] cv', cvId, '->', r.status, r.headers.get('content-type'));
+            if (!r.ok) continue;
+            const blob = await r.blob();
+            if (blob.size < 200) {
+                console.warn('[avatars] cv', cvId, 'photo blob suspiciously small:', blob.size, 'bytes — keeping initials');
+                continue;
+            }
+            const url = URL.createObjectURL(blob);
+            slot.innerHTML = `<img src="${url}" alt="" class="w-full h-full object-cover">`;
+        } catch (e) {
+            console.warn('[avatars] cv', cvId, 'fetch failed:', e);
+        }
+    }
+}
+
+// ── Toast helper for auto-save flow ─────────────────────────────
+function showToast(message, kind = 'success') {
+    let el = document.getElementById('appToast');
+    if (!el) {
+        el = document.createElement('div');
+        el.id = 'appToast';
+        el.className = 'fixed top-5 right-5 z-50 px-4 py-2.5 rounded-lg shadow-lg text-sm font-medium transition-opacity duration-300 opacity-0';
+        document.body.appendChild(el);
+    }
+    el.className = el.className.replace(/bg-\S+|text-\S+|border-\S+/g, '').trim();
+    const palette = kind === 'success'
+        ? 'bg-green-50 text-green-700 border border-green-200'
+        : 'bg-red-50 text-red-600 border border-red-200';
+    el.className = `fixed top-5 right-5 z-50 px-4 py-2.5 rounded-lg shadow-lg text-sm font-medium transition-opacity duration-300 ${palette}`;
+    el.textContent = message;
+    requestAnimationFrame(() => { el.style.opacity = '1'; });
+    clearTimeout(showToast._t);
+    showToast._t = setTimeout(() => { el.style.opacity = '0'; }, 3000);
+}
+
+// ── Single Upload (auto-parse, auto-review, auto-save) ──────────
 async function uploadFile(file) {
     currentFilename = file.name;
     const formData = new FormData();
@@ -172,7 +230,7 @@ async function uploadFile(file) {
     showView('loadingView');
 
     try {
-        const response = await apiFetch(`/parse-cv`, {
+        const response = await apiFetch(`/upload-cv`, {
             method: 'POST',
             body: formData
         });
@@ -181,27 +239,24 @@ async function uploadFile(file) {
             const contentType = response.headers.get('content-type') || '';
             if (contentType.includes('application/json')) {
                 const errData = await response.json();
-                throw new Error(errData.detail || "API parsing failed");
+                throw new Error(errData.detail || "Upload failed");
             } else {
-                // nginx returned an HTML error page (502/504 timeout etc.)
-                throw new Error(`Server error (${response.status}). Das Backend ist nicht erreichbar oder das Parsing hat zu lange gedauert.`);
+                throw new Error(`Server error (${response.status}). Das Backend ist nicht erreichbar oder die Verarbeitung hat zu lange gedauert.`);
             }
         }
 
-        const contentType = response.headers.get('content-type') || '';
-        if (!contentType.includes('application/json')) {
-            throw new Error('Server hat eine ungültige Antwort zurückgegeben (kein JSON). Bitte erneut versuchen.');
-        }
         const result = await response.json();
-        currentData = result.data;
+        showToast(`CV gespeichert: ${result.name || file.name}`);
 
-        showView('resultsView');
-        jsonEditor.value = JSON.stringify(currentData, null, 4);
-        updatePreview(currentData);
+        // Skip the manual review step — go straight to the dashboard.
+        showView('dashboardView');
+        loadDashboard();
 
     } catch (error) {
         console.error(error);
-        if (authToken) alert("Error parsing document: " + error.message);
+        if (authToken) {
+            showToast('Fehler: ' + error.message, 'error');
+        }
         showView('uploadView');
     }
 }
@@ -300,6 +355,28 @@ function updatePreview(data) {
         });
     });
 
+    // Spoken languages — own section, no rating bars.
+    const previewLangs = data.languages || [];
+    if (previewLangs.length) {
+        const catHeader = document.createElement('h4');
+        catHeader.className = 'text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-4 mb-2';
+        catHeader.textContent = 'Languages';
+        skillsContainer.appendChild(catHeader);
+        const list = document.createElement('div');
+        list.className = 'text-xs text-slate-700 flex flex-wrap gap-x-3 gap-y-1';
+        previewLangs.forEach(l => {
+            const name = (l.name || '').trim();
+            if (!name) return;
+            const lvl = (l.level || '').trim();
+            const span = document.createElement('span');
+            span.innerHTML = lvl
+                ? `${name} <span class="text-slate-400">(${lvl})</span>`
+                : name;
+            list.appendChild(span);
+        });
+        skillsContainer.appendChild(list);
+    }
+
     const projectsContainer = document.getElementById('previewProjects');
     projectsContainer.innerHTML = '';
     (data.projects || []).forEach(p => {
@@ -340,91 +417,22 @@ btnSaveDB.addEventListener('click', async () => {
     }
 });
 
-// ── Generate PPTX / PDF ─────────────────────────────────────────
-function triggerBlobDownload(blob, filename, ext = '.pptx') {
-    // Ensure filename ends with the expected extension
+// ── PDF download helpers ───────────────────────────────────────
+function triggerBlobDownload(blob, filename, ext = '.pdf') {
     if (!filename.toLowerCase().endsWith(ext)) filename += ext;
-
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.style.display = 'none';
     a.href = url;
-    a.setAttribute('download', filename); // Use setAttribute for better compatibility
+    a.setAttribute('download', filename);
     a.download = filename;
     document.body.appendChild(a);
     a.click();
-    
-    // Slight delay before cleanup
     setTimeout(() => {
         window.URL.revokeObjectURL(url);
         document.body.removeChild(a);
     }, 1000);
 }
-
-async function downloadPPTXDirect(cvId) {
-    // Fetch the PPTX as a blob, then extract filename from Content-Disposition
-    const url = `${API_BASE}/cvs/${cvId}/pptx`;
-    const response = await fetch(url, {
-        headers: { "Authorization": `Bearer ${authToken}` }
-    });
-    if (!response.ok) {
-        const errData = await response.json().catch(() => ({ detail: "Failed to download PPTX" }));
-        throw new Error(errData.detail || "Server error during PPTX generation");
-    }
-
-    // Try to get filename from Content-Disposition header
-    let filename = "CV_Summary.pptx";
-    const disposition = response.headers.get("Content-Disposition");
-    if (disposition) {
-        const match = disposition.match(/filename[^;=\n]*="?([^";\n]+)"?/i);
-        if (match && match[1]) filename = match[1];
-    }
-
-    const arrayBuffer = await response.arrayBuffer();
-    const blob = new Blob([arrayBuffer], {
-        type: 'application/vnd.openxmlformats-officedocument.presentationml.presentation'
-    });
-    triggerBlobDownload(blob, filename);
-}
-
-async function generatePPTXFromData(data) {
-    // POST approach for unsaved/edited data (from JSON editor)
-    if (!data || Object.keys(data).length === 0) {
-        throw new Error("No data available to export.");
-    }
-    const response = await apiFetch(`/export-pptx`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ data })
-    });
-    if (!response.ok) {
-        const errData = await response.json().catch(() => ({ detail: "Failed to generate PPTX" }));
-        throw new Error(errData.detail || "Server error during PPTX generation");
-    }
-
-    const name = data.personal_information?.full_name || "CV";
-    const filename = `${name.replace(/\s+/g, '_')}_Summary.pptx`;
-
-    const arrayBuffer = await response.arrayBuffer();
-    const blob = new Blob([arrayBuffer], {
-        type: 'application/vnd.openxmlformats-officedocument.presentationml.presentation'
-    });
-    triggerBlobDownload(blob, filename);
-}
-
-btnGeneratePPTX.addEventListener('click', async () => {
-    try {
-        const finalData = JSON.parse(jsonEditor.value);
-        const btnOriginalHTML = btnGeneratePPTX.innerHTML;
-        btnGeneratePPTX.innerHTML = '<i class="fa-solid fa-spinner spinner"></i> Generating...';
-        await generatePPTXFromData(finalData);
-        btnGeneratePPTX.innerHTML = '<i class="fa-solid fa-check"></i> Downloaded';
-        setTimeout(() => { btnGeneratePPTX.innerHTML = btnOriginalHTML; }, 2000);
-    } catch (err) {
-        alert("Error generating PPTX: " + err.message);
-        btnGeneratePPTX.innerHTML = '<i class="fa-solid fa-file-powerpoint"></i> Generate PPTX';
-    }
-});
 
 async function downloadPDFDirect(cvId) {
     const url = `${API_BASE}/cvs/${cvId}/pdf`;
@@ -480,7 +488,63 @@ btnGeneratePDF.addEventListener('click', async () => {
         setTimeout(() => { btnGeneratePDF.innerHTML = btnOriginalHTML; }, 2000);
     } catch (err) {
         alert("Error generating PDF: " + err.message);
-        btnGeneratePDF.innerHTML = '<i class="fa-solid fa-file-pdf"></i> Generate PDF';
+        btnGeneratePDF.innerHTML = '<i class="fa-solid fa-file-pdf"></i> One-Pager';
+    }
+});
+
+// ── Full CV (multi-page, internal use) ──────────────────────────
+async function downloadFullCVDirect(cvId) {
+    const url = `${API_BASE}/cvs/${cvId}/full-cv`;
+    const response = await fetch(url, {
+        headers: { "Authorization": `Bearer ${authToken}` }
+    });
+    if (!response.ok) {
+        const errData = await response.json().catch(() => ({ detail: "Failed to download Full CV" }));
+        throw new Error(errData.detail || "Server error during Full CV generation");
+    }
+    let filename = "Candidate_FullCV.pdf";
+    const disposition = response.headers.get("Content-Disposition");
+    if (disposition) {
+        const match = disposition.match(/filename[^;=\n]*="?([^";\n]+)"?/i);
+        if (match && match[1]) filename = match[1];
+    }
+    const arrayBuffer = await response.arrayBuffer();
+    const blob = new Blob([arrayBuffer], { type: 'application/pdf' });
+    triggerBlobDownload(blob, filename, '.pdf');
+}
+
+async function generateFullCVFromData(data) {
+    if (!data || Object.keys(data).length === 0) {
+        throw new Error("No data available to export.");
+    }
+    const response = await apiFetch(`/export-full-cv`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ data })
+    });
+    if (!response.ok) {
+        const errData = await response.json().catch(() => ({ detail: "Failed to generate Full CV" }));
+        throw new Error(errData.detail || "Server error during Full CV generation");
+    }
+    const name = data.personal_information?.full_name || "CV";
+    const filename = `${name.replace(/\s+/g, '_')}_FullCV.pdf`;
+    const arrayBuffer = await response.arrayBuffer();
+    const blob = new Blob([arrayBuffer], { type: 'application/pdf' });
+    triggerBlobDownload(blob, filename, '.pdf');
+}
+
+const btnGenerateFullCV = document.getElementById('btnGenerateFullCV');
+btnGenerateFullCV.addEventListener('click', async () => {
+    try {
+        const finalData = JSON.parse(jsonEditor.value);
+        const btnOriginalHTML = btnGenerateFullCV.innerHTML;
+        btnGenerateFullCV.innerHTML = '<i class="fa-solid fa-spinner spinner"></i> Generating...';
+        await generateFullCVFromData(finalData);
+        btnGenerateFullCV.innerHTML = '<i class="fa-solid fa-check"></i> Downloaded';
+        setTimeout(() => { btnGenerateFullCV.innerHTML = btnOriginalHTML; }, 2000);
+    } catch (err) {
+        alert("Error generating Full CV: " + err.message);
+        btnGenerateFullCV.innerHTML = '<i class="fa-solid fa-file-lines"></i> Full CV';
     }
 });
 
@@ -514,9 +578,7 @@ function renderDashboardTable(cvs) {
     emptyState.classList.add('hidden');
     tbody.innerHTML = cvs.map((cv, i) => {
         const date = cv.created_at ? new Date(cv.created_at).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '-';
-        const initials = (cv.name || "??").split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
-        
-        // JSON-Wissen anwenden: Text in Objekt umwandeln und Skills zählen
+
         let skillCount = 0;
         try {
             const data = JSON.parse(cv.raw_json || "{}");
@@ -528,7 +590,7 @@ function renderDashboardTable(cvs) {
             <td class="px-3 py-2.5 text-slate-400 font-mono text-xs">${cv.id}</td>
             <td class="px-3 py-2.5">
                 <div class="flex items-center gap-2">
-                    <div class="w-7 h-7 rounded-full bg-brand-light text-brand-blue flex items-center justify-center text-xs font-bold flex-shrink-0">${initials}</div>
+                    ${avatarHtml(cv, 'w-7 h-7')}
                     <span class="font-semibold text-slate-800 text-sm">${cv.name || 'Unknown'}</span>
                 </div>
             </td>
@@ -544,13 +606,14 @@ function renderDashboardTable(cvs) {
             <td class="px-3 py-2.5 text-right">
                 <div class="flex items-center justify-end gap-1">
                     <button onclick="previewCandidate(${cv.id})" class="p-1.5 rounded hover:bg-brand-light text-slate-400 hover:text-brand-blue transition-colors" title="Anzeigen"><i class="fa-solid fa-eye text-sm"></i></button>
-                    <button onclick="downloadCVPDF(${cv.id})" class="p-1.5 rounded hover:bg-red-50 text-slate-400 hover:text-red-600 transition-colors" title="PDF"><i class="fa-solid fa-file-pdf text-sm"></i></button>
-                    <button onclick="downloadCVPPTX(${cv.id})" class="p-1.5 rounded hover:bg-green-50 text-slate-400 hover:text-green-600 transition-colors" title="PPTX"><i class="fa-solid fa-file-powerpoint text-sm"></i></button>
+                    <button onclick="downloadCVPDF(${cv.id})" class="p-1.5 rounded hover:bg-red-50 text-slate-400 hover:text-red-600 transition-colors" title="One-Pager PDF"><i class="fa-solid fa-file-pdf text-sm"></i></button>
+                    <button onclick="downloadCVFullPDF(${cv.id})" class="p-1.5 rounded hover:bg-blue-50 text-slate-400 hover:text-blue-600 transition-colors" title="Full CV PDF"><i class="fa-solid fa-file-lines text-sm"></i></button>
                     <button onclick="deleteCV(${cv.id})" class="p-1.5 rounded hover:bg-red-50 text-slate-400 hover:text-red-500 transition-colors" title="Löschen"><i class="fa-solid fa-trash-can text-sm"></i></button>
                 </div>
             </td>
         </tr>`;
     }).join('');
+    hydrateAvatars();
 }
 
 async function viewCV(id) {
@@ -565,16 +628,16 @@ async function viewCV(id) {
     } catch (err) { alert(err.message); }
 }
 
-async function downloadCVPPTX(id) {
-    try {
-        await downloadPPTXDirect(id);
-    } catch (err) { alert("Error downloading PPTX: " + err.message); }
-}
-
 async function downloadCVPDF(id) {
     try {
         await downloadPDFDirect(id);
     } catch (err) { alert("Error downloading PDF: " + err.message); }
+}
+
+async function downloadCVFullPDF(id) {
+    try {
+        await downloadFullCVDirect(id);
+    } catch (err) { alert("Error downloading Full CV: " + err.message); }
 }
 
 async function deleteCV(id) {
@@ -792,7 +855,20 @@ async function previewCandidate(id) {
 
         const name = personal.full_name || 'Unknown';
         const initials = name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
-        document.getElementById('candidateModalAvatar').textContent = initials;
+        const avatarEl = document.getElementById('candidateModalAvatar');
+        avatarEl.textContent = initials;
+        avatarEl.classList.add('overflow-hidden');
+        if (cv.has_photo) {
+            try {
+                const r = await fetch(`${API_BASE}/cvs/${id}/photo`, {
+                    headers: { Authorization: `Bearer ${authToken}` }
+                });
+                if (r.ok) {
+                    const blob = await r.blob();
+                    avatarEl.innerHTML = `<img src="${URL.createObjectURL(blob)}" alt="" class="w-full h-full object-cover">`;
+                }
+            } catch (e) { /* keep initials */ }
+        }
         document.getElementById('candidateModalName').textContent = name;
         document.getElementById('candidateModalEmail').textContent = personal.email || '';
         document.getElementById('candidateModalLocation').textContent = personal.location ? `📍 ${personal.location}` : '';
@@ -832,6 +908,30 @@ async function previewCandidate(id) {
             skillsContainer.appendChild(section);
         });
 
+        // Spoken languages — separate from skill_matrix, no rating bar.
+        const languages = data.languages || [];
+        if (languages.length) {
+            const section = document.createElement('div');
+            const header = document.createElement('div');
+            header.className = 'text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2';
+            header.textContent = 'Languages';
+            section.appendChild(header);
+            const list = document.createElement('div');
+            list.className = 'text-xs text-slate-700 flex flex-wrap gap-x-3 gap-y-1';
+            languages.forEach(l => {
+                const name = (l.name || '').trim();
+                if (!name) return;
+                const lvl = (l.level || '').trim();
+                const span = document.createElement('span');
+                span.innerHTML = lvl
+                    ? `${name} <span class="text-slate-400">(${lvl})</span>`
+                    : name;
+                list.appendChild(span);
+            });
+            section.appendChild(list);
+            skillsContainer.appendChild(section);
+        }
+
         const projectsContainer = document.getElementById('candidateModalProjects');
         projectsContainer.innerHTML = '';
         (data.projects || []).forEach(p => {
@@ -844,9 +944,88 @@ async function previewCandidate(id) {
             projectsContainer.appendChild(div);
         });
 
+        await renderCandidateVersions(id);
+
         document.getElementById('candidateModal').classList.remove('hidden');
     } catch (err) {
         alert('Error loading candidate: ' + err.message);
+    }
+}
+
+async function renderCandidateVersions(cvId) {
+    const wrap = document.getElementById('candidateModalVersionsWrap');
+    const container = document.getElementById('candidateModalVersions');
+    const countEl = document.getElementById('candidateModalVersionsCount');
+    container.innerHTML = '';
+    countEl.textContent = '';
+    wrap.classList.add('hidden');
+    try {
+        const res = await apiFetch(`/cvs/${cvId}/versions`);
+        if (!res.ok) return;
+        const versions = await res.json();
+        if (!versions.length) return;
+
+        countEl.textContent = `(${versions.length})`;
+        versions.forEach(v => {
+            const created = v.created_at ? new Date(v.created_at).toLocaleString('de-DE') : '';
+            const fname = v.source_filename || '—';
+            const row = document.createElement('div');
+            row.className = 'flex items-center justify-between gap-3 border border-slate-200 rounded-lg px-3 py-2 hover:bg-slate-50 transition-colors';
+            const left = document.createElement('div');
+            left.className = 'min-w-0 flex-1';
+            const title = document.createElement('div');
+            title.className = 'text-sm font-medium text-slate-800';
+            title.textContent = `v${v.version_number}`;
+            const meta = document.createElement('div');
+            meta.className = 'text-xs text-slate-500 truncate';
+            meta.textContent = `${created} · ${fname}`;
+            left.appendChild(title);
+            left.appendChild(meta);
+            const actions = document.createElement('div');
+            actions.className = 'flex items-center gap-1 flex-shrink-0';
+            const onePagerBtn = document.createElement('button');
+            onePagerBtn.className = 'p-1.5 rounded hover:bg-red-50 text-slate-400 hover:text-red-600 transition-colors';
+            onePagerBtn.title = 'One-Pager dieser Version';
+            onePagerBtn.innerHTML = '<i class="fa-solid fa-file-pdf text-sm"></i>';
+            onePagerBtn.onclick = () => downloadVersionPDF(cvId, v.id, 'pdf');
+            const fullBtn = document.createElement('button');
+            fullBtn.className = 'p-1.5 rounded hover:bg-blue-50 text-slate-400 hover:text-blue-600 transition-colors';
+            fullBtn.title = 'Full-CV dieser Version';
+            fullBtn.innerHTML = '<i class="fa-solid fa-file-lines text-sm"></i>';
+            fullBtn.onclick = () => downloadVersionPDF(cvId, v.id, 'full-pdf');
+            actions.appendChild(onePagerBtn);
+            actions.appendChild(fullBtn);
+            row.appendChild(left);
+            row.appendChild(actions);
+            container.appendChild(row);
+        });
+        wrap.classList.remove('hidden');
+    } catch (err) {
+        console.warn('Failed to load versions:', err);
+    }
+}
+
+async function downloadVersionPDF(cvId, versionId, kind) {
+    try {
+        const res = await apiFetch(`/cvs/${cvId}/versions/${versionId}/${kind}`);
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            throw new Error(err.detail || `HTTP ${res.status}`);
+        }
+        const blob = await res.blob();
+        const cd = res.headers.get('Content-Disposition') || '';
+        const match = cd.match(/filename="([^"]+)"/);
+        const filename = match ? match[1] : `cv_v${versionId}.pdf`;
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    } catch (err) {
+        alert('Download fehlgeschlagen: ' + err.message);
     }
 }
 

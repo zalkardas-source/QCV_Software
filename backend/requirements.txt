@@ -6,7 +6,6 @@ pydantic
 pydantic-settings
 python-jose[cryptography]
 passlib[bcrypt]
-python-pptx
 docling
 openai
 python-dotenv

@@ -24,31 +24,52 @@
         font-size: 9pt;
         line-height: 1.32;
     }
+
+    /* ── 3-COLUMN LAYOUT ────────────────────────────────────────────────
+       No separate header strip. Each column has its OWN top block:
+         - left:   the photo (tall, ~54mm)
+         - middle: the candidate name + role (~32mm)
+         - right:  the Quatelio logo (~32mm)
+       The photo is taller than the name/logo blocks, so the boxes below
+       it start LOWER in the left column than in the other two — exactly
+       like the BearingPoint reference profiles.                            */
     body {
         display: flex;
+        flex-direction: row;
+        gap: 4mm;
+    }
+    .col {
+        display: flex;
         flex-direction: column;
+        gap: 3mm;
+        min-width: 0;
+        min-height: 0;
+    }
+    .col-left   { flex: 1;   }
+    .col-middle { flex: 1.2; }
+    .col-right  { flex: 1.4; }
+
+    /* The last box in each column stretches to fill the column → all
+       three column bottoms align at the page footer.                       */
+    .col > .box:last-child {
+        flex: 1 1 auto;
     }
 
-    /* ── HEADER ─────────────────────────────────────────────── */
-    .header {
-        display: flex;
-        align-items: flex-start;
-        gap: 8mm;
-        padding-bottom: 5mm;
-        position: relative;
+    /* ── COLUMN HEADS ──────────────────────────────────────────────── */
+    .head-photo {
         flex: 0 0 auto;
+        align-self: flex-start;
     }
-    .header .photo {
-        width: 38mm;
-        height: 48mm;
-        background: #e1e6ee;
-        border-radius: 0.6mm;
+    .head-photo .photo,
+    .head-photo .photo-placeholder {
+        width: 100%;
+        max-width: 50mm;
+        height: 54mm;
         object-fit: cover;
-        flex-shrink: 0;
+        border-radius: 0.6mm;
+        display: block;
     }
-    .header .photo-placeholder {
-        width: 38mm;
-        height: 48mm;
+    .head-photo .photo-placeholder {
         background: #00569c;
         color: white;
         font-weight: 700;
@@ -56,73 +77,50 @@
         display: flex;
         align-items: center;
         justify-content: center;
-        border-radius: 0.6mm;
-        flex-shrink: 0;
     }
-    .header .name-block {
-        flex: 1;
-        padding-top: 9mm;
+
+    .head-name {
+        flex: 0 0 auto;
+        height: 32mm;
+        display: flex;
+        flex-direction: column;
+        justify-content: flex-start;
+        padding-top: 4mm;
     }
-    .header .name {
+    .head-name .name {
         font-size: 22pt;
         font-weight: 400;
         color: #1e1e23;
         line-height: 1.1;
         margin: 0;
     }
-    .header .role {
+    .head-name .role {
         font-size: 13pt;
         font-weight: 700;
         color: #00569c;
-        margin: 1.5mm 0 0 0;
+        margin: 2mm 0 0 0;
     }
-    .header .logo {
-        position: absolute;
-        right: 0;
-        top: 0;
-        height: 15mm;
+
+    .head-logo {
+        flex: 0 0 auto;
+        height: 32mm;
+        display: flex;
+        align-items: flex-start;
+        justify-content: flex-end;
+        padding-top: 2mm;
+    }
+    .head-logo .logo {
+        height: 17mm;
         width: auto;
     }
-    .header .logo-text {
-        position: absolute;
-        right: 0;
-        top: 4mm;
+    .head-logo .logo-text {
         font-weight: 700;
-        font-size: 13pt;
+        font-size: 14pt;
         color: #00569c;
         letter-spacing: 0.2pt;
     }
 
-    /* ── 3-COLUMN BODY ──────────────────────────────────────── */
-    /* Body fills the remaining page height (after header). Each column is a
-       flex container; the last box in every column stretches to fill the
-       column — that's what makes the BearingPoint look: borders run all the
-       way to the bottom of the page, no matter how much content there is. */
-    .body {
-        flex: 1 1 auto;
-        display: grid;
-        grid-template-columns: 1fr 1.2fr 1.4fr;
-        gap: 4mm;
-        min-height: 0;
-    }
-    .col {
-        display: flex;
-        flex-direction: column;
-        gap: 3mm;
-        min-height: 0;
-    }
-    .col > .box:last-child {
-        flex: 1 1 auto;
-    }
-
-    /* ── NOTCHED BOX ────────────────────────────────────────── */
-    /* NO page-break-inside:avoid here. When the box content overflows,
-       WeasyPrint would otherwise keep the top border on page 1 while the
-       trailing items render on page 2 outside any box — that's the
-       "border ends mid-content" artefact we saw on real CVs. Letting the
-       box split cleanly is uglier in theory but never happens in
-       practice because the data caps + description truncation keep
-       everything on one page. */
+    /* ── NOTCHED BOX ────────────────────────────────────────────────── */
     .box {
         position: relative;
         border: 0.25mm solid #00569c;
@@ -147,10 +145,7 @@
         margin: 0 0 1.5mm 0;
     }
 
-    /* Personal Background subsections are stacked top-down with moderate
-       breathing room between them. The taller header + larger photo
-       absorb some vertical space, so the box doesn't need to stretch as
-       much — leftover whitespace at the bottom is small and acceptable. */
+    /* Personal Background subsections stacked with moderate breathing. */
     .personal-background {
         padding: 5mm 4mm 4mm 4mm;
     }
@@ -161,7 +156,7 @@
         margin-bottom: 0;
     }
 
-    /* ── LISTS ──────────────────────────────────────────────── */
+    /* ── LISTS ──────────────────────────────────────────────────────── */
     ul {
         margin: 0;
         padding-left: 3.2mm;
@@ -213,113 +208,111 @@
 </head>
 <body>
 
-<div class="header">
-    {% if photo_data_url %}
-        <img class="photo" src="{{ photo_data_url }}" alt="" />
-    {% else %}
-        <div class="photo-placeholder">{{ initials }}</div>
-    {% endif %}
+{# ── LEFT COLUMN: photo + Personal Background ───────────────────────── #}
+<div class="col col-left">
+    <div class="head-photo">
+        {% if photo_data_url %}
+            <img class="photo" src="{{ photo_data_url }}" alt="" />
+        {% else %}
+            <div class="photo-placeholder">{{ initials }}</div>
+        {% endif %}
+    </div>
 
-    <div class="name-block">
+    <div class="box personal-background">
+        <div class="box-title">Personal Background</div>
+
+        {% if education_certificates %}
+            <div class="subsection">
+                <div class="subhead">Education / Certificates</div>
+                <ul>
+                {% for entry in education_certificates %}
+                    <li>{{ entry }}</li>
+                {% endfor %}
+                </ul>
+            </div>
+        {% endif %}
+
+        {% if industries %}
+            <div class="subsection">
+                <div class="subhead">Industries</div>
+                <ul>
+                {% for ind in industries %}
+                    <li>{{ ind }}</li>
+                {% endfor %}
+                </ul>
+            </div>
+        {% endif %}
+
+        {% if languages %}
+            <div class="subsection">
+                <div class="subhead">Languages</div>
+                <ul>
+                {% for lang in languages %}
+                    <li>
+                        {{ lang.name }}
+                        {%- if lang.level %} <span class="lang-level">({{ lang.level }})</span>{% endif %}
+                    </li>
+                {% endfor %}
+                </ul>
+            </div>
+        {% endif %}
+    </div>
+</div>
+
+{# ── MIDDLE COLUMN: name+role head + Focus + Background ─────────────── #}
+<div class="col col-middle">
+    <div class="head-name">
         <h1 class="name">{{ full_name }}</h1>
         {% if role_title %}
             <div class="role">{{ role_title }}</div>
         {% endif %}
     </div>
 
-    {% if logo_data_url %}
-        <img class="logo" src="{{ logo_data_url }}" alt="Quatelio" />
-    {% else %}
-        <div class="logo-text">Quatelio</div>
+    {% if professional_focus %}
+    <div class="box">
+        <div class="box-title">Professional Focus</div>
+        <ul>
+        {% for bullet in professional_focus %}
+            <li>{{ bullet }}</li>
+        {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+
+    {% if professional_background %}
+    <div class="box">
+        <div class="box-title">Professional Background</div>
+        {% for entry in professional_background %}
+            <div class="bg-item">
+                <span class="when">{{ entry.duration }}</span>
+                {% if entry.company %} — <span class="who">{{ entry.company }}</span>{% endif %}
+                {% if entry.role %} — <span class="who">{{ entry.role }}</span>{% endif %}
+            </div>
+        {% endfor %}
+    </div>
     {% endif %}
 </div>
 
-<div class="body">
-
-    {# ── LEFT: Personal Background ───────────────────────────── #}
-    <div class="col">
-        <div class="box personal-background">
-            <div class="box-title">Personal Background</div>
-
-            {% if education_certificates %}
-                <div class="subsection">
-                    <div class="subhead">Education / Certificates</div>
-                    <ul>
-                    {% for entry in education_certificates %}
-                        <li>{{ entry }}</li>
-                    {% endfor %}
-                    </ul>
-                </div>
-            {% endif %}
-
-            {% if industries %}
-                <div class="subsection">
-                    <div class="subhead">Industries</div>
-                    <ul>
-                    {% for ind in industries %}
-                        <li>{{ ind }}</li>
-                    {% endfor %}
-                    </ul>
-                </div>
-            {% endif %}
-
-            {% if languages %}
-                <div class="subsection">
-                    <div class="subhead">Languages</div>
-                    <ul>
-                    {% for lang in languages %}
-                        <li>
-                            {{ lang.name }}
-                            {%- if lang.level %} <span class="lang-level">({{ lang.level }})</span>{% endif %}
-                        </li>
-                    {% endfor %}
-                    </ul>
-                </div>
-            {% endif %}
-        </div>
-    </div>
-
-    {# ── MIDDLE: Focus + Background ──────────────────────────── #}
-    <div class="col">
-        {% if professional_focus %}
-        <div class="box">
-            <div class="box-title">Professional Focus</div>
-            <ul>
-            {% for bullet in professional_focus %}
-                <li>{{ bullet }}</li>
-            {% endfor %}
-            </ul>
-        </div>
-        {% endif %}
-
-        {% if professional_background %}
-        <div class="box">
-            <div class="box-title">Professional Background</div>
-            {% for entry in professional_background %}
-                <div class="bg-item">
-                    <span class="when">{{ entry.duration }}</span>
-                    {% if entry.company %} — <span class="who">{{ entry.company }}</span>{% endif %}
-                    {% if entry.role %} — <span class="who">{{ entry.role }}</span>{% endif %}
-                </div>
-            {% endfor %}
-        </div>
+{# ── RIGHT COLUMN: logo head + Relevant Experience ──────────────────── #}
+<div class="col col-right">
+    <div class="head-logo">
+        {% if logo_data_url %}
+            <img class="logo" src="{{ logo_data_url }}" alt="Quatelio" />
+        {% else %}
+            <div class="logo-text">Quatelio</div>
         {% endif %}
     </div>
 
-    {# ── RIGHT: Relevant Experience ──────────────────────────── #}
-    <div class="col">
-        {% if relevant_experience %}
-        <div class="box">
-            <div class="box-title">Relevant Experience</div>
-            {% for item in relevant_experience %}
-                <div class="exp-item">
-                    <span class="client">{{ item.client_label }}</span>{% if item.description %} <span class="desc">— {{ item.description }}</span>{% endif %}
-                </div>
-            {% endfor %}
-        </div>
-        {% endif %}
+    {% if relevant_experience %}
+    <div class="box">
+        <div class="box-title">Relevant Experience</div>
+        {% for item in relevant_experience %}
+            <div class="exp-item">
+                <span class="client">{{ item.client_label }}</span>{% if item.description %} <span class="desc">— {{ item.description }}</span>{% endif %}
+            </div>
+        {% endfor %}
     </div>
-
+    {% endif %}
 </div>
 
 </body>

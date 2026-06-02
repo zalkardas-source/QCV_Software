@@ -120,11 +120,14 @@
     .col > .box:last-child {
         flex: 1 1 auto;
     }
-    /* Left column starts LOWER so its top edge sits just below the photo
-       that overhangs from the header (54mm photo - 32mm header = 22mm).
-       The middle and right columns keep starting at body top. */
+    /* Left column starts LOWER so its top edge sits BELOW the photo that
+       overhangs from the header. Math: header 32mm + box-title overhang
+       2.4mm = 34.4mm baseline; photo is 54mm tall → 19.6mm overhang; we
+       want at least 4-5mm of clean gap between the photo bottom and the
+       box-title's red notch, so 28mm margin-top puts the box top at
+       Y=60mm with a comfortable 6mm clearance from the photo. */
     .col-left > .box:first-child {
-        margin-top: 22mm;
+        margin-top: 28mm;
     }
 
     /* ── NOTCHED BOX ────────────────────────────────────────── */

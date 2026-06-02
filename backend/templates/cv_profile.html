@@ -29,26 +29,34 @@
         flex-direction: column;
     }
 
-    /* ── HEADER ─────────────────────────────────────────────── */
+    /* ── HEADER ─────────────────────────────────────────────────
+       The header is a SHORT strip (32mm) holding the name+role and the
+       logo. The photo is absolutely positioned at the top-left and is
+       intentionally TALLER than the header (54mm), so it sticks down
+       into the body area of the page — directly into the left column.
+       The Personal Background box then sits below that overhanging
+       photo via margin-top on .col-left .box, while the middle/right
+       boxes start at the (high) body top. Result: the staggered
+       BearingPoint top line.                                            */
     .header {
-        display: flex;
-        align-items: flex-start;
-        gap: 8mm;
-        padding-bottom: 5mm;
         position: relative;
         flex: 0 0 auto;
+        height: 32mm;
+        padding-bottom: 4mm;
     }
-    .header .photo {
+    .header .photo,
+    .header .photo-placeholder {
+        position: absolute;
+        top: 0;
+        left: 0;
         width: 38mm;
-        height: 48mm;
+        height: 54mm;
         background: #e1e6ee;
         border-radius: 0.6mm;
         object-fit: cover;
-        flex-shrink: 0;
+        z-index: 1;
     }
     .header .photo-placeholder {
-        width: 38mm;
-        height: 48mm;
         background: #00569c;
         color: white;
         font-weight: 700;
@@ -56,12 +64,10 @@
         display: flex;
         align-items: center;
         justify-content: center;
-        border-radius: 0.6mm;
-        flex-shrink: 0;
     }
     .header .name-block {
-        flex: 1;
-        padding-top: 9mm;
+        margin-left: 44mm;
+        padding-top: 4mm;
     }
     .header .name {
         font-size: 22pt;
@@ -113,6 +119,12 @@
     }
     .col > .box:last-child {
         flex: 1 1 auto;
+    }
+    /* Left column starts LOWER so its top edge sits just below the photo
+       that overhangs from the header (54mm photo - 32mm header = 22mm).
+       The middle and right columns keep starting at body top. */
+    .col-left > .box:first-child {
+        margin-top: 22mm;
     }
 
     /* ── NOTCHED BOX ────────────────────────────────────────── */
@@ -237,7 +249,7 @@
 <div class="body">
 
     {# ── LEFT: Personal Background ───────────────────────────── #}
-    <div class="col">
+    <div class="col col-left">
         <div class="box personal-background">
             <div class="box-title">Personal Background</div>
 

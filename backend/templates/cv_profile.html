@@ -142,11 +142,25 @@
 
     .subhead {
         font-weight: 700;
-        font-size: 8.5pt;
+        font-size: 9.5pt;
         color: #1e1e23;
-        margin: 2mm 0 1mm 0;
+        margin: 0 0 1.5mm 0;
     }
-    .subhead:first-child { margin-top: 0; }
+
+    /* Personal Background box: distribute its three subsections evenly
+       across the full column height (mirrors the BearingPoint look —
+       Languages sits near the bottom instead of crammed under Industries). */
+    .personal-background {
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        padding-top: 5mm;
+        padding-bottom: 4mm;
+    }
+    .personal-background .subsection {
+        /* each subsection occupies its natural height; the gaps between
+           them grow when the column stretches. */
+    }
 
     /* ── LISTS ──────────────────────────────────────────────── */
     ul {
@@ -157,8 +171,8 @@
     li {
         position: relative;
         padding-left: 0;
-        margin-bottom: 0.6mm;
-        line-height: 1.28;
+        margin-bottom: 0.9mm;
+        line-height: 1.32;
     }
     li::before {
         content: "•";
@@ -225,37 +239,43 @@
 
     {# ── LEFT: Personal Background ───────────────────────────── #}
     <div class="col">
-        <div class="box">
+        <div class="box personal-background">
             <div class="box-title">Personal Background</div>
 
             {% if education_certificates %}
-                <div class="subhead">Education / Certificates</div>
-                <ul>
-                {% for entry in education_certificates %}
-                    <li>{{ entry }}</li>
-                {% endfor %}
-                </ul>
+                <div class="subsection">
+                    <div class="subhead">Education / Certificates</div>
+                    <ul>
+                    {% for entry in education_certificates %}
+                        <li>{{ entry }}</li>
+                    {% endfor %}
+                    </ul>
+                </div>
             {% endif %}
 
             {% if industries %}
-                <div class="subhead">Industries</div>
-                <ul>
-                {% for ind in industries %}
-                    <li>{{ ind }}</li>
-                {% endfor %}
-                </ul>
+                <div class="subsection">
+                    <div class="subhead">Industries</div>
+                    <ul>
+                    {% for ind in industries %}
+                        <li>{{ ind }}</li>
+                    {% endfor %}
+                    </ul>
+                </div>
             {% endif %}
 
             {% if languages %}
-                <div class="subhead">Languages</div>
-                <ul>
-                {% for lang in languages %}
-                    <li>
-                        {{ lang.name }}
-                        {%- if lang.level %} <span class="lang-level">({{ lang.level }})</span>{% endif %}
-                    </li>
-                {% endfor %}
-                </ul>
+                <div class="subsection">
+                    <div class="subhead">Languages</div>
+                    <ul>
+                    {% for lang in languages %}
+                        <li>
+                            {{ lang.name }}
+                            {%- if lang.level %} <span class="lang-level">({{ lang.level }})</span>{% endif %}
+                        </li>
+                    {% endfor %}
+                    </ul>
+                </div>
             {% endif %}
         </div>
     </div>

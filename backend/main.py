@@ -483,7 +483,7 @@ def download_cv_full(cv_id: int, db: Session = Depends(get_db), user: User = Dep
         raise HTTPException(status_code=404, detail="CV not found")
 
     data = json.loads(profile.raw_json) if profile.raw_json else {}
-    pdf_bytes = create_full_cv_pdf(data)
+    pdf_bytes = create_full_cv_pdf(data, photo_path=profile.photo_path)
 
     name = (profile.name or "CV").replace(' ', '_')
     filename = f"{name}_FullCV.pdf"
@@ -597,7 +597,7 @@ def download_version_full_pdf(cv_id: int, version_id: int, db: Session = Depends
     """Full-CV PDF rendered from a version's snapshot (on-demand)."""
     v = _load_version(db, cv_id, version_id)
     data = json.loads(v.snapshot_json) if v.snapshot_json else {}
-    pdf_bytes = create_full_cv_pdf(data)
+    pdf_bytes = create_full_cv_pdf(data, photo_path=v.photo_path)
     personal = data.get("personal_information", {})
     name = (personal.get("full_name") or "CV").replace(' ', '_')
     filename = f"{name}_v{v.version_number}_FullCV.pdf"

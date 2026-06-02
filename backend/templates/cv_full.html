@@ -1,268 +1,297 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
+<meta charset="utf-8" />
 <title>{{ full_name }} — Full CV</title>
 <style>
-    /* ── Page setup ───────────────────────────────────────────── */
     @page {
-        size: A4;
-        margin: 2.5cm 2.5cm 2.8cm 2.5cm;
-
-        /* Top blue rule on every page */
-        @top-left { content: ""; }
-        @top-center { content: ""; }
-        @top-right { content: ""; }
-
-        /* Bottom: footer text + page number */
+        size: A4 landscape;
+        margin: 9mm 11mm 9mm 11mm;
         @bottom-center {
-            content: "Quatelio GmbH  •  Kaiserstr. 40  •  D-74072 Heilbronn  •  E-Mail: sourcing@quatelio.com  •  Internet: quatelio.com";
-            font-family: "DejaVu Sans", "Helvetica", "Arial", sans-serif;
+            content: counter(page);
+            font-family: 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif;
             font-size: 8pt;
-            color: #6b7280;
-            vertical-align: top;
-            padding-top: 3mm;
-        }
-        @bottom-right {
-            content: "Page | " counter(page);
-            font-family: "DejaVu Sans", "Helvetica", "Arial", sans-serif;
-            font-size: 8pt;
-            color: #9ca3af;
-            vertical-align: top;
-            padding-top: 3mm;
+            color: #94a3b8;
         }
     }
-
-    /* Decorative blue rules drawn as fixed-position elements relative
-       to the page margin box. We use a body::before for the top rule and
-       a footer wrapper inside @bottom-left for the bottom rule. */
-    body::before {
-        content: "";
-        position: fixed;
-        top: 0;
-        left: 0;
-        right: 0;
-        height: 0.6mm;
-        background: #2E5B9F;
-    }
-    body::after {
-        content: "";
-        position: fixed;
-        bottom: 0;
-        left: 0;
-        right: 0;
-        height: 0.3mm;
-        background: #2E5B9F;
-    }
-
     * { box-sizing: border-box; }
-
-    body {
-        font-family: "DejaVu Sans", "Helvetica", "Arial", sans-serif;
-        font-size: 10.5pt;
-        color: #1a1a1a;
-        line-height: 1.45;
-        margin: 0;
-    }
-
-    /* ── Title block (first page) ─────────────────────────────── */
-    .title-block {
-        text-align: center;
-        margin-bottom: 8mm;
-    }
-    .title-name {
-        font-size: 24pt;
-        font-weight: bold;
-        letter-spacing: 0.3pt;
-        color: #1a1a1a;
-        margin: 0;
-    }
-    .title-role {
-        font-size: 14pt;
-        color: #2E5B9F;
-        margin-top: 2mm;
-        font-weight: 500;
-    }
-
-    /* ── Section heading ──────────────────────────────────────── */
-    .section {
-        margin-top: 7mm;
-        break-inside: avoid-page;
-    }
-    .section-title {
-        font-size: 12pt;
-        font-weight: bold;
-        color: #2E5B9F;
-        text-transform: uppercase;
-        letter-spacing: 1.5pt;
-        padding-bottom: 1.5mm;
-        border-bottom: 0.3mm solid #2E5B9F;
-        margin-bottom: 3mm;
-    }
-    .section-title { break-after: avoid; }
-
-    /* ── Personal data table ─────────────────────────────────── */
-    .personal-table {
-        border-collapse: collapse;
-        width: 100%;
-    }
-    .personal-table td {
-        padding: 0.8mm 2mm 0.8mm 0;
-        vertical-align: top;
-        line-height: 1.45;
-    }
-    .personal-table td.label {
-        width: 35mm;
-        color: #2E5B9F;
-        font-weight: 600;
-        white-space: nowrap;
-    }
-    .personal-table td.value {
-        color: #1a1a1a;
-        word-break: break-word;
-    }
-
-    /* ── Body styles ──────────────────────────────────────────── */
-    .summary {
-        text-align: justify;
-        line-height: 1.55;
-    }
-    ul.bullets {
-        margin: 0;
-        padding-left: 5mm;
-    }
-    ul.bullets li {
-        margin-bottom: 1.5mm;
-        line-height: 1.5;
-    }
-    .skill-line .cat {
-        font-weight: bold;
-        color: #2E5B9F;
-    }
-
-    /* ── Experience entries ───────────────────────────────────── */
-    .experience-list {
-        list-style: none;
+    html, body {
         margin: 0;
         padding: 0;
+        font-family: 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+        color: #1e1e23;
+        font-size: 8.5pt;
+        line-height: 1.35;
     }
-    .experience-item {
-        margin-bottom: 5mm;
-        break-inside: avoid;
+
+    /* ── HEADER (only on the first page, repeating via running-element) ─── */
+    .header {
+        display: flex;
+        align-items: flex-start;
+        gap: 8mm;
+        padding-bottom: 5mm;
+        position: relative;
     }
-    .experience-header {
-        font-weight: bold;
-        color: #1a1a1a;
-        font-size: 10.5pt;
-        margin-bottom: 1mm;
+    .header .photo {
+        width: 34mm;
+        height: 42mm;
+        background: #e1e6ee;
+        border-radius: 0.6mm;
+        object-fit: cover;
+        flex-shrink: 0;
     }
-    .experience-description {
-        text-align: justify;
-        color: #2b2b2b;
-        line-height: 1.5;
+    .header .photo-placeholder {
+        width: 34mm;
+        height: 42mm;
+        background: #00569c;
+        color: white;
+        font-weight: 700;
+        font-size: 28pt;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 0.6mm;
+        flex-shrink: 0;
+    }
+    .header .name-block {
+        flex: 1;
+        padding-top: 6mm;
+    }
+    .header .name {
+        font-size: 22pt;
+        font-weight: 400;
+        color: #1e1e23;
+        line-height: 1.1;
+        margin: 0;
+    }
+    .header .role {
+        font-size: 13pt;
+        font-weight: 700;
+        color: #00569c;
+        margin: 1mm 0 0 0;
+    }
+    .header .contact {
+        font-size: 8pt;
+        color: #6b7280;
+        margin-top: 2mm;
+        line-height: 1.4;
+    }
+    .header .contact strong { color: #1e1e23; font-weight: 600; }
+    .header .logo {
+        position: absolute;
+        right: 0;
+        top: 0;
+        height: 14mm;
+        width: auto;
+    }
+    .header .logo-text {
+        position: absolute;
+        right: 0;
+        top: 4mm;
+        font-weight: 700;
+        font-size: 13pt;
+        color: #00569c;
+        letter-spacing: 0.2pt;
+    }
+
+    /* ── 3-COLUMN BODY ──────────────────────────────────────── */
+    .body {
+        display: grid;
+        grid-template-columns: 1fr 1.2fr 1.4fr;
+        gap: 5mm;
+    }
+    .col { display: flex; flex-direction: column; gap: 4mm; }
+
+    /* ── NOTCHED BOX ────────────────────────────────────────── */
+    .box {
+        position: relative;
+        border: 0.25mm solid #00569c;
+        padding: 4mm 4mm 3mm 4mm;
+    }
+    .box-title {
+        position: absolute;
+        top: -2.4mm;
+        left: 3mm;
+        background: white;
+        color: #1e1e23;
+        font-weight: 700;
+        font-size: 9pt;
+        padding: 0 2mm;
+        white-space: nowrap;
+    }
+
+    .subhead {
+        font-weight: 700;
+        font-size: 8.5pt;
+        color: #1e1e23;
+        margin: 2mm 0 1mm 0;
+    }
+    .subhead:first-child { margin-top: 0; }
+
+    ul {
+        margin: 0;
+        padding-left: 3.5mm;
+        list-style: none;
+    }
+    li {
+        position: relative;
+        padding-left: 0;
+        margin-bottom: 0.8mm;
+        line-height: 1.3;
+    }
+    li::before {
+        content: "•";
+        color: #00569c;
+        position: absolute;
+        left: -2.6mm;
+        font-weight: 700;
+    }
+
+    .exp-item {
+        margin-bottom: 2mm;
+        line-height: 1.35;
+        page-break-inside: avoid;
+    }
+    .exp-item .client {
+        font-weight: 700;
+        color: #1e1e23;
+    }
+    .exp-item .desc {
+        color: #414147;
+    }
+
+    .bg-item {
+        margin-bottom: 1.5mm;
+        line-height: 1.3;
+        page-break-inside: avoid;
+    }
+    .bg-item .when {
+        font-weight: 600;
+        color: #1e1e23;
+    }
+    .bg-item .who {
+        color: #414147;
+    }
+
+    .lang-level {
+        color: #6b7280;
     }
 </style>
 </head>
 <body>
 
-<div class="title-block">
-    <div class="title-name">{{ full_name }}</div>
-    {% if job_title %}
-    <div class="title-role">{{ job_title }}</div>
+<div class="header">
+    {% if photo_data_url %}
+        <img class="photo" src="{{ photo_data_url }}" alt="" />
+    {% else %}
+        <div class="photo-placeholder">{{ initials }}</div>
+    {% endif %}
+
+    <div class="name-block">
+        <h1 class="name">{{ full_name }}</h1>
+        {% if role_title %}
+            <div class="role">{{ role_title }}</div>
+        {% endif %}
+        {% if contact and (contact.email or contact.phone or contact.location or contact.linkedin or contact.website) %}
+            <div class="contact">
+                {% if contact.email %}<strong>E-Mail:</strong> {{ contact.email }}{% endif %}
+                {% if contact.phone %}{% if contact.email %} &nbsp;|&nbsp; {% endif %}<strong>Phone:</strong> {{ contact.phone }}{% endif %}
+                {% if contact.location %}{% if contact.email or contact.phone %} &nbsp;|&nbsp; {% endif %}<strong>Location:</strong> {{ contact.location }}{% endif %}
+                {% if contact.linkedin %}<br /><strong>LinkedIn:</strong> {{ contact.linkedin }}{% endif %}
+                {% if contact.website %}{% if contact.linkedin %} &nbsp;|&nbsp; {% endif %}<strong>Web:</strong> {{ contact.website }}{% endif %}
+            </div>
+        {% endif %}
+    </div>
+
+    {% if logo_data_url %}
+        <img class="logo" src="{{ logo_data_url }}" alt="Quatelio" />
+    {% else %}
+        <div class="logo-text">Quatelio</div>
     {% endif %}
 </div>
 
-{% if personal_rows %}
-<div class="section">
-    <div class="section-title">Personal Data</div>
-    <table class="personal-table">
-        {% for row in personal_rows %}
-        <tr>
-            <td class="label">{{ row.label }}</td>
-            <td class="value">{{ row.value }}</td>
-        </tr>
-        {% endfor %}
-    </table>
-</div>
-{% endif %}
+<div class="body">
 
-{% if summary %}
-<div class="section">
-    <div class="section-title">Professional Summary</div>
-    <div class="summary">{{ summary }}</div>
-</div>
-{% endif %}
+    {# ── LEFT: Personal Background ───────────────────────────── #}
+    <div class="col">
+        <div class="box">
+            <div class="box-title">Personal Background</div>
 
-{% if education %}
-<div class="section">
-    <div class="section-title">Education</div>
-    <ul class="bullets">
-        {% for item in education %}
-        <li>{{ item }}</li>
-        {% endfor %}
-    </ul>
-</div>
-{% endif %}
-
-{% if languages %}
-<div class="section">
-    <div class="section-title">Languages</div>
-    <ul class="bullets">
-        {% for lang in languages %}
-        <li>{{ lang }}</li>
-        {% endfor %}
-    </ul>
-</div>
-{% endif %}
-
-{% if certifications %}
-<div class="section">
-    <div class="section-title">Certifications</div>
-    <ul class="bullets">
-        {% for c in certifications %}
-        <li>{{ c }}</li>
-        {% endfor %}
-    </ul>
-</div>
-{% endif %}
-
-{% if skill_lines %}
-<div class="section">
-    <div class="section-title">Core Skills</div>
-    <ul class="bullets">
-        {% for line in skill_lines %}
-        <li class="skill-line"><span class="cat">{{ line.category }}:</span> {{ line.skills }}</li>
-        {% endfor %}
-    </ul>
-</div>
-{% endif %}
-
-{% if projects %}
-<div class="section">
-    <div class="section-title">Professional Experience</div>
-    <ul class="experience-list">
-        {% for proj in projects %}
-        <li class="experience-item">
-            <div class="experience-header">{{ proj.header }}</div>
-            {% if proj.description %}
-            <div class="experience-description">{{ proj.description }}</div>
+            {% if education_certificates %}
+                <div class="subhead">Education / Certificates</div>
+                <ul>
+                {% for entry in education_certificates %}
+                    <li>{{ entry }}</li>
+                {% endfor %}
+                </ul>
             {% endif %}
-        </li>
-        {% endfor %}
-    </ul>
-</div>
-{% endif %}
 
-{% if hobbies %}
-<div class="section">
-    <div class="section-title">Hobbies</div>
-    <ul class="bullets">
-        {% for h in hobbies %}
-        <li>{{ h }}</li>
-        {% endfor %}
-    </ul>
+            {% if industries %}
+                <div class="subhead">Industries</div>
+                <ul>
+                {% for ind in industries %}
+                    <li>{{ ind }}</li>
+                {% endfor %}
+                </ul>
+            {% endif %}
+
+            {% if languages %}
+                <div class="subhead">Languages</div>
+                <ul>
+                {% for lang in languages %}
+                    <li>
+                        {{ lang.name }}
+                        {%- if lang.level %} <span class="lang-level">({{ lang.level }})</span>{% endif %}
+                    </li>
+                {% endfor %}
+                </ul>
+            {% endif %}
+        </div>
+    </div>
+
+    {# ── MIDDLE: Focus + Full Background ─────────────────────── #}
+    <div class="col">
+        {% if professional_focus %}
+        <div class="box">
+            <div class="box-title">Professional Focus</div>
+            <ul>
+            {% for bullet in professional_focus %}
+                <li>{{ bullet }}</li>
+            {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+
+        {% if professional_background %}
+        <div class="box">
+            <div class="box-title">Professional Background</div>
+            {% for entry in professional_background %}
+                <div class="bg-item">
+                    <span class="when">{{ entry.duration }}</span>
+                    {% if entry.company %} — <span class="who">{{ entry.company }}</span>{% endif %}
+                    {% if entry.role %} — <span class="who">{{ entry.role }}</span>{% endif %}
+                    {% if entry.note %}<br /><span class="who">{{ entry.note }}</span>{% endif %}
+                </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+    </div>
+
+    {# ── RIGHT: All Projects ─────────────────────────────────── #}
+    <div class="col">
+        {% if relevant_experience %}
+        <div class="box">
+            <div class="box-title">Relevant Experience</div>
+            {% for item in relevant_experience %}
+                <div class="exp-item">
+                    <span class="client">{{ item.client_label }}</span>{% if item.description %} <span class="desc">— {{ item.description }}</span>{% endif %}
+                </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+    </div>
+
 </div>
-{% endif %}
 
 </body>
 </html>

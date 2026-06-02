@@ -314,6 +314,73 @@ jsonEditor.addEventListener('input', (e) => {
     } catch (err) { /* ignore invalid JSON while editing */ }
 });
 
+function _fillBulletList(elementId, items) {
+    const el = document.getElementById(elementId);
+    if (!el) return;
+    el.innerHTML = '';
+    (items || []).forEach(text => {
+        const t = (typeof text === 'string' ? text : '').trim();
+        if (!t) return;
+        const li = document.createElement('li');
+        li.textContent = t;
+        el.appendChild(li);
+    });
+}
+
+function _fillExperience(elementId, items, opts = {}) {
+    const el = document.getElementById(elementId);
+    if (!el) return;
+    el.innerHTML = '';
+    (items || []).forEach(it => {
+        const label = (it && it.client_label || '').trim();
+        const desc = (it && it.description || '').trim();
+        if (!label && !desc) return;
+        const div = document.createElement('div');
+        div.className = opts.compact
+            ? 'text-[12px] leading-snug'
+            : 'text-sm leading-snug';
+        div.innerHTML = `
+            <span class="font-bold text-slate-900">${label}</span>${desc ? ` <span class="text-slate-600">— ${desc}</span>` : ''}
+        `;
+        el.appendChild(div);
+    });
+}
+
+function _fillBackground(elementId, items, opts = {}) {
+    const el = document.getElementById(elementId);
+    if (!el) return;
+    el.innerHTML = '';
+    (items || []).forEach(it => {
+        const duration = (it && it.duration || '').trim();
+        const company = (it && it.company || '').trim();
+        const role = (it && it.role || '').trim();
+        const note = (it && it.note || '').trim();
+        if (!(duration || company || role)) return;
+        const parts = [];
+        if (duration) parts.push(`<span class="font-semibold text-slate-800">${duration}</span>`);
+        if (company) parts.push(`<span class="text-slate-600">${company}</span>`);
+        if (role) parts.push(`<span class="text-slate-600">${role}</span>`);
+        const div = document.createElement('div');
+        div.className = opts.compact ? 'text-[12px] leading-snug' : 'text-sm leading-snug';
+        div.innerHTML = parts.join(' — ') + (note ? `<div class="text-slate-500 text-xs mt-0.5">${note}</div>` : '');
+        el.appendChild(div);
+    });
+}
+
+function _fillLanguages(elementId, languages) {
+    const el = document.getElementById(elementId);
+    if (!el) return;
+    el.innerHTML = '';
+    (languages || []).forEach(l => {
+        const name = (l && l.name || '').trim();
+        if (!name) return;
+        const lvl = (l && l.level || '').trim();
+        const li = document.createElement('li');
+        li.innerHTML = lvl ? `${name} <span class="text-slate-400">(${lvl})</span>` : name;
+        el.appendChild(li);
+    });
+}
+
 function updatePreview(data) {
     const personal = data.personal_information || {};
     document.getElementById('previewName').textContent = personal.full_name || "Unknown Candidate";
@@ -321,74 +388,15 @@ function updatePreview(data) {
     document.getElementById('previewPhone').textContent = personal.phone || "-";
     document.getElementById('previewLocation').textContent = personal.location || "-";
 
-    document.getElementById('previewSummary').textContent = data.small_summary || "No summary available.";
+    const roleEl = document.getElementById('previewRole');
+    if (roleEl) roleEl.textContent = (data.role_title || '').trim() || 'Professional Profile';
 
-    const skillsContainer = document.getElementById('previewSkills');
-    skillsContainer.innerHTML = '';
-    (data.skill_matrix || []).forEach(group => {
-        const catName = group.category || "General";
-        
-        // Add Category Header
-        const catHeader = document.createElement('h4');
-        catHeader.className = 'text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-4 mb-2';
-        catHeader.textContent = catName;
-        skillsContainer.appendChild(catHeader);
-
-        (group.skills || []).forEach(s => {
-            const name = s.skill || "";
-            const rating = s.rating;
-            if (name) {
-                const r = Math.min(10, Math.max(0, parseInt(rating) || 5));
-                const pct = (r / 10) * 100;
-                const barColor = r >= 8 ? '#22c55e' : r >= 5 ? '#f59e0b' : '#ef4444';
-                const div = document.createElement('div');
-                div.className = 'flex items-center gap-2 w-full py-1';
-                div.innerHTML = `
-                    <span class="text-xs text-slate-700 font-medium w-2/5 shrink-0 break-words leading-tight">${name}</span>
-                    <div class="flex-1 bg-slate-200 rounded-full h-1.5 overflow-hidden">
-                        <div style="width:${pct}%; background:${barColor};" class="h-full rounded-full transition-all duration-300"></div>
-                    </div>
-                    <span class="text-xs font-bold w-6 text-right shrink-0" style="color:${barColor}">${r}</span>
-                `;
-                skillsContainer.appendChild(div);
-            }
-        });
-    });
-
-    // Spoken languages — own section, no rating bars.
-    const previewLangs = data.languages || [];
-    if (previewLangs.length) {
-        const catHeader = document.createElement('h4');
-        catHeader.className = 'text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-4 mb-2';
-        catHeader.textContent = 'Languages';
-        skillsContainer.appendChild(catHeader);
-        const list = document.createElement('div');
-        list.className = 'text-xs text-slate-700 flex flex-wrap gap-x-3 gap-y-1';
-        previewLangs.forEach(l => {
-            const name = (l.name || '').trim();
-            if (!name) return;
-            const lvl = (l.level || '').trim();
-            const span = document.createElement('span');
-            span.innerHTML = lvl
-                ? `${name} <span class="text-slate-400">(${lvl})</span>`
-                : name;
-            list.appendChild(span);
-        });
-        skillsContainer.appendChild(list);
-    }
-
-    const projectsContainer = document.getElementById('previewProjects');
-    projectsContainer.innerHTML = '';
-    (data.projects || []).forEach(p => {
-        const div = document.createElement('div');
-        div.className = 'border-l-2 border-brand-blue pl-3';
-        div.innerHTML = `
-            <div class="text-xs font-bold text-slate-900">${p.name || 'Unnamed Project'}</div>
-            <div class="text-[10px] text-slate-500 mb-1">${p.duration || ''}</div>
-            <div class="text-[11px] text-slate-600 line-clamp-2">${p.description || ''}</div>
-        `;
-        projectsContainer.appendChild(div);
-    });
+    _fillBulletList('previewFocus', data.professional_focus);
+    _fillBulletList('previewEducation', data.education_certificates);
+    _fillBulletList('previewIndustries', data.industries);
+    _fillLanguages('previewLanguages', data.languages);
+    _fillBackground('previewBackground', data.professional_background);
+    _fillExperience('previewExperience', data.relevant_experience);
 }
 
 // ── Save to DB ──────────────────────────────────────────────────
@@ -579,10 +587,16 @@ function renderDashboardTable(cvs) {
     tbody.innerHTML = cvs.map((cv, i) => {
         const date = cv.created_at ? new Date(cv.created_at).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '-';
 
-        let skillCount = 0;
+        let industriesLabel = '-';
         try {
             const data = JSON.parse(cv.raw_json || "{}");
-            skillCount = (data.skill_matrix || []).reduce((sum, g) => sum + (g.skills || []).length, 0);
+            const inds = (data.industries || []).filter(Boolean);
+            if (inds.length) {
+                industriesLabel = inds.slice(0, 2).join(', ') + (inds.length > 2 ? ` +${inds.length - 2}` : '');
+            } else {
+                const projInds = [...new Set((data.projects || []).map(p => (p.industry || '').trim()).filter(Boolean))];
+                if (projInds.length) industriesLabel = projInds.slice(0, 2).join(', ') + (projInds.length > 2 ? ` +${projInds.length - 2}` : '');
+            }
         } catch (e) { console.error("JSON Error", e); }
 
         return `
@@ -597,8 +611,8 @@ function renderDashboardTable(cvs) {
             <td class="px-3 py-2.5 text-slate-500 text-xs max-w-[160px]"><span class="block truncate" title="${cv.email || ''}">${cv.email || '-'}</span></td>
             <td class="px-3 py-2.5 max-w-[120px]"><span class="bg-slate-100 text-slate-600 px-2 py-0.5 rounded text-xs font-mono block truncate" title="${cv.filename || ''}">${cv.filename || '-'}</span></td>
             <td class="px-3 py-2.5">
-                <span class="px-2 py-1 bg-blue-50 text-blue-600 rounded-full text-xs font-bold border border-blue-100 whitespace-nowrap">
-                    ${skillCount} Skills
+                <span class="px-2 py-1 bg-blue-50 text-blue-600 rounded-md text-xs font-medium border border-blue-100 inline-block max-w-[180px] truncate" title="${industriesLabel}">
+                    ${industriesLabel}
                 </span>
             </td>
             <td class="px-3 py-2.5">${renderStatusSelect(cv.id, cv.status || 'new')}</td>
@@ -872,7 +886,8 @@ async function previewCandidate(id) {
         document.getElementById('candidateModalName').textContent = name;
         document.getElementById('candidateModalEmail').textContent = personal.email || '';
         document.getElementById('candidateModalLocation').textContent = personal.location ? `📍 ${personal.location}` : '';
-        document.getElementById('candidateModalSummary').textContent = data.small_summary || '';
+        const roleEl = document.getElementById('candidateModalRole');
+        if (roleEl) roleEl.textContent = (data.role_title || '').trim();
 
         document.getElementById('candidateModalEditBtn').onclick = () => {
             closeCandidateModal();
@@ -883,66 +898,12 @@ async function previewCandidate(id) {
             updatePreview(data);
         };
 
-        const skillsContainer = document.getElementById('candidateModalSkills');
-        skillsContainer.innerHTML = '';
-        (data.skill_matrix || []).forEach(group => {
-            const section = document.createElement('div');
-            const header = document.createElement('div');
-            header.className = 'text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2';
-            header.textContent = group.category || 'General';
-            section.appendChild(header);
-            (group.skills || []).forEach(s => {
-                const r = Math.min(10, Math.max(0, parseInt(s.rating) || 5));
-                const pct = (r / 10) * 100;
-                const color = r >= 8 ? '#22c55e' : r >= 5 ? '#f59e0b' : '#ef4444';
-                const row = document.createElement('div');
-                row.className = 'flex items-center gap-2 py-0.5';
-                row.innerHTML = `
-                    <span class="text-xs text-slate-700 w-40 shrink-0 truncate">${s.skill}</span>
-                    <div class="flex-1 bg-slate-200 rounded-full h-1.5 overflow-hidden">
-                        <div style="width:${pct}%;background:${color}" class="h-full rounded-full"></div>
-                    </div>
-                    <span class="text-xs font-bold w-5 text-right shrink-0" style="color:${color}">${r}</span>`;
-                section.appendChild(row);
-            });
-            skillsContainer.appendChild(section);
-        });
-
-        // Spoken languages — separate from skill_matrix, no rating bar.
-        const languages = data.languages || [];
-        if (languages.length) {
-            const section = document.createElement('div');
-            const header = document.createElement('div');
-            header.className = 'text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2';
-            header.textContent = 'Languages';
-            section.appendChild(header);
-            const list = document.createElement('div');
-            list.className = 'text-xs text-slate-700 flex flex-wrap gap-x-3 gap-y-1';
-            languages.forEach(l => {
-                const name = (l.name || '').trim();
-                if (!name) return;
-                const lvl = (l.level || '').trim();
-                const span = document.createElement('span');
-                span.innerHTML = lvl
-                    ? `${name} <span class="text-slate-400">(${lvl})</span>`
-                    : name;
-                list.appendChild(span);
-            });
-            section.appendChild(list);
-            skillsContainer.appendChild(section);
-        }
-
-        const projectsContainer = document.getElementById('candidateModalProjects');
-        projectsContainer.innerHTML = '';
-        (data.projects || []).forEach(p => {
-            const div = document.createElement('div');
-            div.className = 'border-l-2 border-brand-blue pl-3 py-0.5';
-            div.innerHTML = `
-                <div class="text-sm font-bold text-slate-900">${p.name || 'Unnamed'}</div>
-                <div class="text-xs text-slate-400 mb-1">${p.duration || ''}</div>
-                <div class="text-xs text-slate-600 line-clamp-3">${p.description || ''}</div>`;
-            projectsContainer.appendChild(div);
-        });
+        _fillBulletList('candidateModalEducation', data.education_certificates);
+        _fillBulletList('candidateModalIndustries', data.industries);
+        _fillLanguages('candidateModalLanguages', data.languages);
+        _fillBulletList('candidateModalFocus', data.professional_focus);
+        _fillBackground('candidateModalBackground', data.professional_background);
+        _fillExperience('candidateModalExperience', data.relevant_experience);
 
         await renderCandidateVersions(id);
 

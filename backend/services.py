@@ -497,10 +497,10 @@ def structure_cv_data(raw_markdown: str) -> dict:
            exact name.
          * Otherwise generate a short descriptive label from industry + size
            hint + region. Patterns that work well:
-           - "Leading {country} {industry} company"   ("Leading Polish food producer")
-           - "{rank} largest {industry} {entity}"     ("10th largest pharmaceutical company in the world")
-           - "{country}'s largest {sector} company"   ("Poland's largest energy sector company")
-           - "Global {industry} player"               ("Global car dealer")
+           - "Leading <country> <industry> company"   ("Leading Polish food producer")
+           - "<rank> largest <industry> <entity>"     ("10th largest pharmaceutical company in the world")
+           - "<country>'s largest <sector> company"   ("Poland's largest energy sector company")
+           - "Global <industry> player"               ("Global car dealer")
          * Keep client_label under 10 words.
        - `description`: 1-2 short sentences. Name the SAP modules / tech used
          and the candidate's role.

@@ -96,12 +96,17 @@
     .col { display: flex; flex-direction: column; gap: 3mm; }
 
     /* ── NOTCHED BOX ────────────────────────────────────────── */
+    /* NO page-break-inside:avoid here. When the box content overflows,
+       WeasyPrint would otherwise keep the top border on page 1 while the
+       trailing items render on page 2 outside any box — that's the
+       "border ends mid-content" artefact we saw on real CVs. Letting the
+       box split cleanly is uglier in theory but never happens in
+       practice because the data caps + description truncation keep
+       everything on one page. */
     .box {
         position: relative;
         border: 0.25mm solid #00569c;
         padding: 3.5mm 3.5mm 3mm 3.5mm;
-        page-break-inside: avoid;
-        break-inside: avoid;
     }
     .box-title {
         position: absolute;

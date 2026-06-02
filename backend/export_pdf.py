@@ -23,11 +23,15 @@ _SENTENCE_BOUNDARY = re.compile(r"(?<=[.!?])\s+")
 
 # One-pager constraints (landscape A4, must fit one page).
 # Tightened after real-world Frolov CV overflowed onto page 2.
-_ONEPAGER_MAX_RELEVANT_EXPERIENCE = 6
+_ONEPAGER_MAX_RELEVANT_EXPERIENCE = 5
 _ONEPAGER_MAX_BACKGROUND = 3
 _ONEPAGER_MAX_FOCUS = 5
 _ONEPAGER_MAX_EDUCATION = 4
 _ONEPAGER_MAX_INDUSTRIES = 5
+# Per-entry length cap for the one-pager (in characters). Long descriptions
+# (8-10 lines) from the LLM cause page overflow and the box-border bug where
+# the border stops mid-content. Truncated at word boundary with an ellipsis.
+_ONEPAGER_DESCRIPTION_MAX_CHARS = 220
 
 _env = Environment(
     loader=FileSystemLoader(_TEMPLATE_DIR),
@@ -62,6 +66,16 @@ def _split_sentences(text: str, max_count: int) -> list[str]:
         return []
     sentences = [s.strip() for s in _SENTENCE_BOUNDARY.split(text.strip()) if s.strip()]
     return sentences[:max_count]
+
+
+def _truncate_at_word(text: str, max_chars: int) -> str:
+    """Truncate text at the nearest word boundary <= max_chars, append '…'.
+    Returns text unchanged if already short enough.
+    """
+    if not text or len(text) <= max_chars:
+        return text or ""
+    cut = text[:max_chars].rsplit(" ", 1)[0]
+    return cut.rstrip(",.;:– -") + "…"
 
 
 def _backfill_new_fields(data: dict) -> dict:
@@ -190,7 +204,17 @@ def _prepare_context(data: dict) -> dict:
     personal = data.get("personal_information", {}) or {}
     full_name = personal.get("full_name") or "Candidate Profile"
 
-    relevant_experience = list(data.get("relevant_experience") or [])[:_ONEPAGER_MAX_RELEVANT_EXPERIENCE]
+    relevant_experience = []
+    for item in (data.get("relevant_experience") or [])[:_ONEPAGER_MAX_RELEVANT_EXPERIENCE]:
+        if not isinstance(item, dict):
+            continue
+        relevant_experience.append({
+            "client_label": (item.get("client_label") or "").strip(),
+            "description": _truncate_at_word(
+                (item.get("description") or "").strip(),
+                _ONEPAGER_DESCRIPTION_MAX_CHARS,
+            ),
+        })
     professional_background = list(data.get("professional_background") or [])[:_ONEPAGER_MAX_BACKGROUND]
     professional_focus = list(data.get("professional_focus") or [])[:_ONEPAGER_MAX_FOCUS]
     education_certificates = list(data.get("education_certificates") or [])[:_ONEPAGER_MAX_EDUCATION]

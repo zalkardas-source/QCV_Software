@@ -211,10 +211,11 @@ def test_prepare_context_caps_to_one_pager_limits():
         "professional_focus": [f"bullet {i}" for i in range(20)],
     }
     ctx = _prepare_context(data)
-    # Tightened caps after Frolov-CV overflow.
-    assert len(ctx["relevant_experience"]) <= 6
-    assert len(ctx["professional_background"]) <= 3
-    assert len(ctx["professional_focus"]) <= 5
+    # Caps modelled on BearingPoint reference profiles (full page coverage
+    # via flex stretch; ~7 experience bullets is the comfortable sweet spot).
+    assert len(ctx["relevant_experience"]) <= 7
+    assert len(ctx["professional_background"]) <= 5
+    assert len(ctx["professional_focus"]) <= 6
 
 
 def test_prepare_full_cv_context_does_not_cap_new_fields():

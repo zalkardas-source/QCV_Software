@@ -22,16 +22,19 @@ _YEAR_RE = re.compile(r"\b(?:19|20)\d{2}\b")
 _SENTENCE_BOUNDARY = re.compile(r"(?<=[.!?])\s+")
 
 # One-pager constraints (landscape A4, must fit one page).
-# Tightened after real-world Frolov CV overflowed onto page 2.
-_ONEPAGER_MAX_RELEVANT_EXPERIENCE = 5
-_ONEPAGER_MAX_BACKGROUND = 3
-_ONEPAGER_MAX_FOCUS = 5
-_ONEPAGER_MAX_EDUCATION = 4
+# Caps modelled on the BearingPoint reference profiles — they pack ~8 short
+# experience bullets, ~5 background rows, ~5-6 focus bullets per page. The
+# flex layout (last box in each column stretches) means even sparser CVs
+# look "full" because borders run to the page bottom.
+_ONEPAGER_MAX_RELEVANT_EXPERIENCE = 7
+_ONEPAGER_MAX_BACKGROUND = 5
+_ONEPAGER_MAX_FOCUS = 6
+_ONEPAGER_MAX_EDUCATION = 5
 _ONEPAGER_MAX_INDUSTRIES = 5
 # Per-entry length cap for the one-pager (in characters). Long descriptions
-# (8-10 lines) from the LLM cause page overflow and the box-border bug where
-# the border stops mid-content. Truncated at word boundary with an ellipsis.
-_ONEPAGER_DESCRIPTION_MAX_CHARS = 220
+# (8-10 lines) from the LLM cause page overflow. Truncate at word boundary
+# with an ellipsis. Short enough that ~7 experience bullets fit comfortably.
+_ONEPAGER_DESCRIPTION_MAX_CHARS = 180
 
 _env = Environment(
     loader=FileSystemLoader(_TEMPLATE_DIR),

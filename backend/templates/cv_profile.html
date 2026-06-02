@@ -18,10 +18,15 @@
     html, body {
         margin: 0;
         padding: 0;
+        height: 100%;
         font-family: 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif;
         color: #1e1e23;
         font-size: 9pt;
         line-height: 1.32;
+    }
+    body {
+        display: flex;
+        flex-direction: column;
     }
 
     /* ── HEADER ─────────────────────────────────────────────── */
@@ -31,6 +36,7 @@
         gap: 7mm;
         padding-bottom: 4mm;
         position: relative;
+        flex: 0 0 auto;
     }
     .header .photo {
         width: 30mm;
@@ -88,12 +94,26 @@
     }
 
     /* ── 3-COLUMN BODY ──────────────────────────────────────── */
+    /* Body fills the remaining page height (after header). Each column is a
+       flex container; the last box in every column stretches to fill the
+       column — that's what makes the BearingPoint look: borders run all the
+       way to the bottom of the page, no matter how much content there is. */
     .body {
+        flex: 1 1 auto;
         display: grid;
         grid-template-columns: 1fr 1.2fr 1.4fr;
         gap: 4mm;
+        min-height: 0;
     }
-    .col { display: flex; flex-direction: column; gap: 3mm; }
+    .col {
+        display: flex;
+        flex-direction: column;
+        gap: 3mm;
+        min-height: 0;
+    }
+    .col > .box:last-child {
+        flex: 1 1 auto;
+    }
 
     /* ── NOTCHED BOX ────────────────────────────────────────── */
     /* NO page-break-inside:avoid here. When the box content overflows,

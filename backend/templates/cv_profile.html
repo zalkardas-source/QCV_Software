@@ -33,26 +33,26 @@
     .header {
         display: flex;
         align-items: flex-start;
-        gap: 7mm;
-        padding-bottom: 4mm;
+        gap: 8mm;
+        padding-bottom: 5mm;
         position: relative;
         flex: 0 0 auto;
     }
     .header .photo {
-        width: 30mm;
-        height: 38mm;
+        width: 38mm;
+        height: 48mm;
         background: #e1e6ee;
         border-radius: 0.6mm;
         object-fit: cover;
         flex-shrink: 0;
     }
     .header .photo-placeholder {
-        width: 30mm;
-        height: 38mm;
+        width: 38mm;
+        height: 48mm;
         background: #00569c;
         color: white;
         font-weight: 700;
-        font-size: 26pt;
+        font-size: 30pt;
         display: flex;
         align-items: center;
         justify-content: center;
@@ -61,26 +61,26 @@
     }
     .header .name-block {
         flex: 1;
-        padding-top: 5mm;
+        padding-top: 9mm;
     }
     .header .name {
-        font-size: 20pt;
+        font-size: 22pt;
         font-weight: 400;
         color: #1e1e23;
         line-height: 1.1;
         margin: 0;
     }
     .header .role {
-        font-size: 12pt;
+        font-size: 13pt;
         font-weight: 700;
         color: #00569c;
-        margin: 1mm 0 0 0;
+        margin: 1.5mm 0 0 0;
     }
     .header .logo {
         position: absolute;
         right: 0;
         top: 0;
-        height: 13mm;
+        height: 15mm;
         width: auto;
     }
     .header .logo-text {
@@ -147,19 +147,18 @@
         margin: 0 0 1.5mm 0;
     }
 
-    /* Personal Background box: distribute its three subsections evenly
-       across the full column height (mirrors the BearingPoint look —
-       Languages sits near the bottom instead of crammed under Industries). */
+    /* Personal Background subsections are stacked top-down with moderate
+       breathing room between them. The taller header + larger photo
+       absorb some vertical space, so the box doesn't need to stretch as
+       much — leftover whitespace at the bottom is small and acceptable. */
     .personal-background {
-        display: flex;
-        flex-direction: column;
-        justify-content: space-between;
-        padding-top: 5mm;
-        padding-bottom: 4mm;
+        padding: 5mm 4mm 4mm 4mm;
     }
     .personal-background .subsection {
-        /* each subsection occupies its natural height; the gaps between
-           them grow when the column stretches. */
+        margin-bottom: 5mm;
+    }
+    .personal-background .subsection:last-child {
+        margin-bottom: 0;
     }
 
     /* ── LISTS ──────────────────────────────────────────────── */

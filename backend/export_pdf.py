@@ -22,10 +22,11 @@ _YEAR_RE = re.compile(r"\b(?:19|20)\d{2}\b")
 _SENTENCE_BOUNDARY = re.compile(r"(?<=[.!?])\s+")
 
 # One-pager constraints (landscape A4, must fit one page).
-_ONEPAGER_MAX_RELEVANT_EXPERIENCE = 8
-_ONEPAGER_MAX_BACKGROUND = 5
-_ONEPAGER_MAX_FOCUS = 6
-_ONEPAGER_MAX_EDUCATION = 5
+# Tightened after real-world Frolov CV overflowed onto page 2.
+_ONEPAGER_MAX_RELEVANT_EXPERIENCE = 6
+_ONEPAGER_MAX_BACKGROUND = 3
+_ONEPAGER_MAX_FOCUS = 5
+_ONEPAGER_MAX_EDUCATION = 4
 _ONEPAGER_MAX_INDUSTRIES = 5
 
 _env = Environment(
@@ -178,18 +179,6 @@ def _logo_to_data_url() -> str | None:
     return f"data:image/png;base64,{encoded}"
 
 
-def _personal_contact(personal: dict) -> dict:
-    """Compact contact dict for the full CV. Empty values stay empty so the
-    template can collapse missing rows."""
-    return {
-        "email":    (personal.get("email") or "").strip(),
-        "phone":    (personal.get("phone") or "").strip(),
-        "location": (personal.get("location") or "").strip(),
-        "linkedin": (personal.get("linkedin") or "").strip(),
-        "website":  (personal.get("website") or "").strip(),
-    }
-
-
 def _prepare_context(data: dict) -> dict:
     """Build the one-pager context for the BearingPoint-style 3-column layout.
 
@@ -236,49 +225,141 @@ def create_pdf_summary(data: dict, photo_path: str | Path | None = None) -> byte
     return _weasy_html()(string=html_str, base_url=str(_TEMPLATE_DIR)).write_pdf()
 
 
-# ── Full CV (multi-page, all projects, same 3-col landscape layout) ────────
+# ── Full CV (multi-page, classic portrait layout — KEPT from before the
+#    BearingPoint redesign. The one-pager carries the new pitch-first
+#    layout; the full CV is the exhaustive "all information" sheet. ──────
+
+
+# Section ordering for the full CV's "Core Skills" block. Languages live in
+# their own section above and must not appear here a second time.
+_FULL_CV_CATEGORY_ORDER = (
+    "Programming Languages",
+    "Frameworks & Libraries",
+    "Databases",
+    "Tools & Platforms",
+    "SAP",
+    "Data & Analytics",
+    "Methods & Frameworks",
+    "Communication & Training",
+)
+
+
+# Personal-data row labels for the Full-CV's Personal Data block. Order matters
+# — this is the on-page order. Each entry: (json_key, display_label).
+_PERSONAL_ROW_ORDER = (
+    ("age_or_dob",     "Date of Birth"),
+    ("nationality",    "Nationality"),
+    ("marital_status", "Marital Status"),
+    ("location",       "Location"),
+    ("email",          "E-Mail"),
+    ("phone",          "Phone"),
+    ("linkedin",       "LinkedIn"),
+    ("website",        "Website"),
+)
 
 
 def _prepare_full_cv_context(data: dict) -> dict:
-    """Build the multi-page full-CV context. Same field shape as the one-pager
-    but with no per-section caps — everything the LLM extracted gets rendered.
-    The full CV adds a small contact block that the one-pager hides.
-    """
-    data = _backfill_new_fields(dict(data))
     personal = data.get("personal_information", {}) or {}
     full_name = personal.get("full_name") or "Candidate Profile"
 
-    relevant_experience = list(data.get("relevant_experience") or [])
-    professional_background = list(data.get("professional_background") or [])
-    professional_focus = list(data.get("professional_focus") or [])
-    education_certificates = list(data.get("education_certificates") or [])
-    industries = list(data.get("industries") or [])
+    personal_rows = []
+    for key, label in _PERSONAL_ROW_ORDER:
+        value = (personal.get(key) or "")
+        if isinstance(value, str):
+            value = value.strip()
+        if value:
+            personal_rows.append({"label": label, "value": value})
 
-    languages = [
-        {"name": (l.get("name") or "").strip(), "level": (l.get("level") or "").strip()}
-        for l in (data.get("languages") or [])
-        if isinstance(l, dict) and (l.get("name") or "").strip()
-    ]
+    raw_projects = [p for p in (data.get("projects") or []) if isinstance(p, dict)]
+    # Same chronological sort as the one-pager, but NO Top-N cap — full CV
+    # is the exhaustive sheet, every project must appear.
+    sorted_projects = sorted(raw_projects, key=_score_project, reverse=True)
+
+    # Job title = role_title if the LLM filled it, else most-recent project's name.
+    job_title = (data.get("role_title") or "").strip()
+    if not job_title:
+        for p in sorted_projects:
+            if p.get("name"):
+                job_title = p["name"]
+                break
+
+    projects = []
+    for p in sorted_projects:
+        name = (p.get("name") or "").strip()
+        duration = (p.get("duration") or "").strip()
+        industry = (p.get("industry") or "").strip()
+        pieces = [name] if name else []
+        if industry:
+            pieces.append(f"– {industry}")
+        if duration:
+            pieces.append(f"({duration})")
+        header = " ".join(pieces).strip() or "Position"
+        projects.append({
+            "header": header,
+            "description": (p.get("description") or "").strip(),
+        })
+
+    # Spoken languages: prefer the dedicated `languages` field; fall back to
+    # the legacy skill_matrix Languages-category for old stored CVs.
+    languages: list[str] = []
+    for l in data.get("languages") or []:
+        if not isinstance(l, dict):
+            continue
+        name = (l.get("name") or "").strip()
+        if not name:
+            continue
+        level = (l.get("level") or "").strip()
+        languages.append(f"{name} ({level})" if level else name)
+
+    skill_lines: list[dict] = []
+    grouped: dict[str, list[str]] = {}
+    for group in data.get("skill_matrix", []) or []:
+        if not isinstance(group, dict):
+            continue
+        cat = group.get("category") or ""
+        names = []
+        for s in group.get("skills", []) or []:
+            if not isinstance(s, dict):
+                continue
+            n = (s.get("skill") or "").strip()
+            if n:
+                names.append(n)
+        if not names:
+            continue
+        if cat == "Languages":
+            if not languages:
+                languages.extend(names)
+        else:
+            grouped[cat] = names
+
+    for cat in _FULL_CV_CATEGORY_ORDER:
+        names = grouped.get(cat)
+        if names:
+            skill_lines.append({"category": cat, "skills": ", ".join(names)})
+
+    # Education / Certifications: use the new combined `education_certificates`
+    # field when the schema has it; old CVs leave both lists empty.
+    education = list(data.get("education_certificates") or [])
 
     return {
         "full_name": full_name,
-        "initials": _make_initials(full_name),
-        "role_title": (data.get("role_title") or "").strip(),
-        "contact": _personal_contact(personal),
-        "professional_focus": professional_focus,
-        "relevant_experience": relevant_experience,
-        "professional_background": professional_background,
-        "education_certificates": education_certificates,
-        "industries": industries,
+        "job_title": job_title,
+        "personal_rows": personal_rows,
+        "summary": (data.get("small_summary") or "").strip(),
+        "education": education,
+        "certifications": [],
+        "hobbies": [],
         "languages": languages,
-        "logo_data_url": _logo_to_data_url(),
+        "skill_lines": skill_lines,
+        "projects": projects,
     }
 
 
 def create_full_cv_pdf(data: dict, photo_path: str | Path | None = None) -> bytes:
-    """Render the multi-page Quatelio-format CV to PDF bytes."""
+    """Render the classic-portrait Quatelio-format full CV to PDF bytes.
+    The `photo_path` parameter is accepted for API compatibility but the
+    portrait full-CV template doesn't render a photo (it stays text-only)."""
     template = _env.get_template("cv_full.html")
     context = _prepare_full_cv_context(data)
-    context["photo_data_url"] = _photo_to_data_url(photo_path)
     html_str = template.render(**context)
     return _weasy_html()(string=html_str, base_url=str(_TEMPLATE_DIR)).write_pdf()

@@ -169,29 +169,35 @@ def test_one_pager_template_renders_with_full_data():
     assert "Relevant Experience" in html
 
 
-def test_full_cv_template_renders_with_contact_block():
+def test_full_cv_template_renders_classic_portrait_layout():
+    """The full CV template is the legacy portrait layout — Personal Data
+    table, Professional Summary, Education, Languages, Core Skills,
+    Professional Experience. New BearingPoint fields are NOT consumed here."""
     env = Environment(loader=FileSystemLoader(TEMPLATE_DIR))
     template = env.get_template("cv_full.html")
     html = template.render(
         full_name="John Smith",
-        initials="JS",
-        role_title="Senior SAP Consultant",
-        photo_data_url=None,
-        logo_data_url=None,
-        contact={"email": "j.smith@example.com", "phone": "+49 123", "location": "Berlin", "linkedin": "", "website": ""},
-        professional_focus=["Expert in SAP MM/SD"],
-        relevant_experience=[{"client_label": "BMW Group", "description": "Rollout."}],
-        professional_background=[{"duration": "2018-present", "company": "Quatelio", "role": "Consultant", "note": None}],
-        education_certificates=["TU Munich"],
-        industries=["Automotive"],
-        languages=[{"name": "English", "level": "fluent"}],
+        job_title="Senior SAP Consultant",
+        personal_rows=[{"label": "E-Mail", "value": "j.smith@example.com"},
+                       {"label": "Location", "value": "Berlin"}],
+        summary="Senior SAP consultant with 15 years experience.",
+        education=["TU Munich, Computer Science"],
+        certifications=[],
+        hobbies=[],
+        languages=["English (fluent)", "German (native)"],
+        skill_lines=[{"category": "SAP", "skills": "SAP MM, SAP SD"}],
+        projects=[{"header": "Project Alpha (2020-2022)", "description": "Full S/4HANA rollout."}],
     )
+    assert "John Smith" in html
     assert "j.smith@example.com" in html
     assert "Berlin" in html
+    assert "Senior SAP consultant" in html
+    assert "Project Alpha" in html
+    assert "Full S/4HANA rollout" in html
 
 
 def test_prepare_context_caps_to_one_pager_limits():
-    """One-pager caps each section so the result fits a single page."""
+    """One-pager caps each section so the result fits a single A4 page."""
     data = {
         "personal_information": {"full_name": "Test"},
         "relevant_experience": [{"client_label": f"Client {i}", "description": "x"} for i in range(20)],
@@ -199,20 +205,27 @@ def test_prepare_context_caps_to_one_pager_limits():
         "professional_focus": [f"bullet {i}" for i in range(20)],
     }
     ctx = _prepare_context(data)
-    assert len(ctx["relevant_experience"]) <= 8
-    assert len(ctx["professional_background"]) <= 5
-    assert len(ctx["professional_focus"]) <= 6
+    # Tightened caps after Frolov-CV overflow.
+    assert len(ctx["relevant_experience"]) <= 6
+    assert len(ctx["professional_background"]) <= 3
+    assert len(ctx["professional_focus"]) <= 5
 
 
-def test_prepare_full_cv_context_does_not_cap():
-    """Full CV doesn't cap — all entries pass through."""
+def test_prepare_full_cv_context_passes_all_projects():
+    """Full CV keeps the legacy fields (personal_rows, projects, skill_lines,
+    languages) and does NOT cap project count."""
     data = {
-        "personal_information": {"full_name": "Test"},
-        "relevant_experience": [{"client_label": f"Client {i}", "description": "x"} for i in range(20)],
-        "professional_background": [{"duration": f"{i}", "company": "X", "role": "Y"} for i in range(20)],
-        "professional_focus": [f"bullet {i}" for i in range(20)],
+        "personal_information": {"full_name": "Test", "email": "t@example.com"},
+        "small_summary": "Summary text.",
+        "projects": [{"name": f"P{i}", "duration": f"202{i}-202{i+1}", "industry": "Tech",
+                       "description": f"desc {i}"} for i in range(15)],
+        "skill_matrix": [{"category": "SAP", "skills": [{"skill": "SAP MM", "rating": 8}]}],
+        "languages": [{"name": "English", "level": "fluent"}],
     }
     ctx = _prepare_full_cv_context(data)
-    assert len(ctx["relevant_experience"]) == 20
-    assert len(ctx["professional_background"]) == 20
-    assert len(ctx["professional_focus"]) == 20
+    assert "personal_rows" in ctx
+    assert "projects" in ctx
+    assert len(ctx["projects"]) == 15
+    assert "skill_lines" in ctx
+    assert ctx["skill_lines"][0]["category"] == "SAP"
+    assert ctx["languages"] == ["English (fluent)"]

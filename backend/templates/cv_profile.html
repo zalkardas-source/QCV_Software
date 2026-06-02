@@ -6,11 +6,11 @@
 <style>
     @page {
         size: A4 landscape;
-        margin: 8mm 10mm 7mm 10mm;
+        margin: 9mm 11mm 8mm 11mm;
         @bottom-center {
             content: counter(page);
             font-family: 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif;
-            font-size: 7.5pt;
+            font-size: 8pt;
             color: #94a3b8;
         }
     }
@@ -20,8 +20,8 @@
         padding: 0;
         font-family: 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif;
         color: #1e1e23;
-        font-size: 8pt;
-        line-height: 1.25;
+        font-size: 9pt;
+        line-height: 1.32;
     }
 
     /* ── HEADER ─────────────────────────────────────────────── */
@@ -29,24 +29,24 @@
         display: flex;
         align-items: flex-start;
         gap: 7mm;
-        padding-bottom: 3mm;
+        padding-bottom: 4mm;
         position: relative;
     }
     .header .photo {
-        width: 28mm;
-        height: 35mm;
+        width: 30mm;
+        height: 38mm;
         background: #e1e6ee;
         border-radius: 0.6mm;
         object-fit: cover;
         flex-shrink: 0;
     }
     .header .photo-placeholder {
-        width: 28mm;
-        height: 35mm;
+        width: 30mm;
+        height: 38mm;
         background: #00569c;
         color: white;
         font-weight: 700;
-        font-size: 24pt;
+        font-size: 26pt;
         display: flex;
         align-items: center;
         justify-content: center;
@@ -58,14 +58,14 @@
         padding-top: 5mm;
     }
     .header .name {
-        font-size: 19pt;
+        font-size: 20pt;
         font-weight: 400;
         color: #1e1e23;
         line-height: 1.1;
         margin: 0;
     }
     .header .role {
-        font-size: 11pt;
+        font-size: 12pt;
         font-weight: 700;
         color: #00569c;
         margin: 1mm 0 0 0;
@@ -74,7 +74,7 @@
         position: absolute;
         right: 0;
         top: 0;
-        height: 12mm;
+        height: 13mm;
         width: auto;
     }
     .header .logo-text {
@@ -99,55 +99,53 @@
     .box {
         position: relative;
         border: 0.25mm solid #00569c;
-        padding: 3mm 3mm 2.5mm 3mm;
+        padding: 3.5mm 3.5mm 3mm 3.5mm;
         page-break-inside: avoid;
         break-inside: avoid;
     }
     .box-title {
         position: absolute;
-        top: -2.2mm;
-        left: 2.5mm;
+        top: -2.4mm;
+        left: 3mm;
         background: white;
         color: #1e1e23;
         font-weight: 700;
-        font-size: 8.5pt;
-        padding: 0 1.5mm;
+        font-size: 9pt;
+        padding: 0 2mm;
         white-space: nowrap;
     }
 
-    /* sub-heading inside the personal-background box */
     .subhead {
         font-weight: 700;
-        font-size: 8pt;
+        font-size: 8.5pt;
         color: #1e1e23;
-        margin: 1.5mm 0 0.6mm 0;
+        margin: 2mm 0 1mm 0;
     }
     .subhead:first-child { margin-top: 0; }
 
     /* ── LISTS ──────────────────────────────────────────────── */
     ul {
         margin: 0;
-        padding-left: 3mm;
+        padding-left: 3.2mm;
         list-style: none;
     }
     li {
         position: relative;
         padding-left: 0;
-        margin-bottom: 0.4mm;
-        line-height: 1.22;
+        margin-bottom: 0.6mm;
+        line-height: 1.28;
     }
     li::before {
         content: "•";
         color: #00569c;
         position: absolute;
-        left: -2.3mm;
+        left: -2.5mm;
         font-weight: 700;
     }
 
-    /* ── RELEVANT EXPERIENCE (bold client label) ────────────── */
     .exp-item {
-        margin-bottom: 1mm;
-        line-height: 1.25;
+        margin-bottom: 1.4mm;
+        line-height: 1.3;
         page-break-inside: avoid;
     }
     .exp-item .client {
@@ -158,10 +156,9 @@
         color: #414147;
     }
 
-    /* ── PROFESSIONAL BACKGROUND ────────────────────────────── */
     .bg-item {
-        margin-bottom: 0.8mm;
-        line-height: 1.22;
+        margin-bottom: 1.1mm;
+        line-height: 1.28;
     }
     .bg-item .when {
         font-weight: 600;

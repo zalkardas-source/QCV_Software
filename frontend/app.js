@@ -314,71 +314,68 @@ jsonEditor.addEventListener('input', (e) => {
     } catch (err) { /* ignore invalid JSON while editing */ }
 });
 
-function _renderSkillMatrixInto(container, data) {
-    container.innerHTML = '';
-    (data.skill_matrix || []).forEach(group => {
-        const catName = group.category || "General";
-        const catHeader = document.createElement('h4');
-        catHeader.className = 'text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-4 mb-2';
-        catHeader.textContent = catName;
-        container.appendChild(catHeader);
-
-        (group.skills || []).forEach(s => {
-            const name = s.skill || "";
-            if (!name) return;
-            const r = Math.min(10, Math.max(0, parseInt(s.rating) || 5));
-            const pct = (r / 10) * 100;
-            const barColor = r >= 8 ? '#22c55e' : r >= 5 ? '#f59e0b' : '#ef4444';
-            const div = document.createElement('div');
-            div.className = 'flex items-center gap-2 w-full py-1';
-            div.innerHTML = `
-                <span class="text-xs text-slate-700 font-medium w-2/5 shrink-0 break-words leading-tight">${name}</span>
-                <div class="flex-1 bg-slate-200 rounded-full h-1.5 overflow-hidden">
-                    <div style="width:${pct}%; background:${barColor};" class="h-full rounded-full transition-all duration-300"></div>
-                </div>
-                <span class="text-xs font-bold w-6 text-right shrink-0" style="color:${barColor}">${r}</span>
-            `;
-            container.appendChild(div);
-        });
+function _fillBulletList(elementId, items) {
+    const el = document.getElementById(elementId);
+    if (!el) return;
+    el.innerHTML = '';
+    (items || []).forEach(text => {
+        const t = (typeof text === 'string' ? text : '').trim();
+        if (!t) return;
+        const li = document.createElement('li');
+        li.textContent = t;
+        el.appendChild(li);
     });
-
-    // Spoken languages — own section, no rating bars.
-    const langs = data.languages || [];
-    if (langs.length) {
-        const catHeader = document.createElement('h4');
-        catHeader.className = 'text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-4 mb-2';
-        catHeader.textContent = 'Languages';
-        container.appendChild(catHeader);
-        const list = document.createElement('div');
-        list.className = 'text-xs text-slate-700 flex flex-wrap gap-x-3 gap-y-1';
-        langs.forEach(l => {
-            const name = (l.name || '').trim();
-            if (!name) return;
-            const lvl = (l.level || '').trim();
-            const span = document.createElement('span');
-            span.innerHTML = lvl
-                ? `${name} <span class="text-slate-400">(${lvl})</span>`
-                : name;
-            list.appendChild(span);
-        });
-        container.appendChild(list);
-    }
 }
 
-function _renderProjectsInto(container, data, opts = {}) {
-    container.innerHTML = '';
-    (data.projects || []).forEach(p => {
+function _fillLanguages(elementId, languages) {
+    const el = document.getElementById(elementId);
+    if (!el) return;
+    el.innerHTML = '';
+    (languages || []).forEach(l => {
+        const name = (l && l.name || '').trim();
+        if (!name) return;
+        const lvl = (l && l.level || '').trim();
+        const li = document.createElement('li');
+        li.innerHTML = lvl ? `${name} <span class="text-slate-400">(${lvl})</span>` : name;
+        el.appendChild(li);
+    });
+}
+
+function _fillBackground(elementId, items) {
+    const el = document.getElementById(elementId);
+    if (!el) return;
+    el.innerHTML = '';
+    (items || []).forEach(it => {
+        const duration = (it && it.duration || '').trim();
+        const company = (it && it.company || '').trim();
+        const role = (it && it.role || '').trim();
+        const note = (it && it.note || '').trim();
+        if (!(duration || company || role)) return;
+        const parts = [];
+        if (duration) parts.push(`<span class="font-semibold text-slate-900">${duration}</span>`);
+        if (company) parts.push(`<span class="text-slate-700">${company}</span>`);
+        if (role) parts.push(`<span class="text-slate-700">${role}</span>`);
         const div = document.createElement('div');
-        div.className = 'border-l-2 border-brand-blue pl-3' + (opts.modal ? ' py-0.5' : '');
-        const nameClass = opts.modal ? 'text-sm font-bold text-slate-900' : 'text-xs font-bold text-slate-900';
-        const dateClass = opts.modal ? 'text-xs text-slate-400 mb-1' : 'text-[10px] text-slate-500 mb-1';
-        const descClass = opts.modal ? 'text-xs text-slate-600 line-clamp-3' : 'text-[11px] text-slate-600 line-clamp-2';
+        div.innerHTML = parts.join(' — ') + (note ? `<div class="text-slate-500 text-xs mt-0.5">${note}</div>` : '');
+        el.appendChild(div);
+    });
+}
+
+function _fillExperience(elementId, items) {
+    const el = document.getElementById(elementId);
+    if (!el) return;
+    el.innerHTML = '';
+    (items || []).forEach(it => {
+        const label = (it && it.client_label || '').trim();
+        const desc = (it && it.description || '').trim();
+        if (!label && !desc) return;
+        const div = document.createElement('div');
+        div.className = 'border-l-2 border-brand-blue pl-3';
         div.innerHTML = `
-            <div class="${nameClass}">${p.name || 'Unnamed Project'}</div>
-            <div class="${dateClass}">${p.duration || ''}</div>
-            <div class="${descClass}">${p.description || ''}</div>
+            <div class="font-bold text-slate-900">${label}</div>
+            ${desc ? `<div class="text-slate-600 mt-0.5">${desc}</div>` : ''}
         `;
-        container.appendChild(div);
+        el.appendChild(div);
     });
 }
 
@@ -392,11 +389,12 @@ function updatePreview(data) {
     const roleEl = document.getElementById('previewRole');
     if (roleEl) roleEl.textContent = (data.role_title || '').trim() || 'Professional Profile';
 
-    const summaryEl = document.getElementById('previewSummary');
-    if (summaryEl) summaryEl.textContent = data.small_summary || "No summary available.";
-
-    _renderSkillMatrixInto(document.getElementById('previewSkills'), data);
-    _renderProjectsInto(document.getElementById('previewProjects'), data);
+    _fillBulletList('previewFocus', data.professional_focus);
+    _fillBulletList('previewEducation', data.education_certificates);
+    _fillBulletList('previewIndustries', data.industries);
+    _fillLanguages('previewLanguages', data.languages);
+    _fillBackground('previewBackground', data.professional_background);
+    _fillExperience('previewExperience', data.relevant_experience);
 }
 
 // ── Save to DB ──────────────────────────────────────────────────
@@ -886,7 +884,8 @@ async function previewCandidate(id) {
         document.getElementById('candidateModalName').textContent = name;
         document.getElementById('candidateModalEmail').textContent = personal.email || '';
         document.getElementById('candidateModalLocation').textContent = personal.location ? `📍 ${personal.location}` : '';
-        document.getElementById('candidateModalSummary').textContent = data.small_summary || '';
+        const roleEl = document.getElementById('candidateModalRole');
+        if (roleEl) roleEl.textContent = (data.role_title || '').trim();
 
         document.getElementById('candidateModalEditBtn').onclick = () => {
             closeCandidateModal();
@@ -897,8 +896,12 @@ async function previewCandidate(id) {
             updatePreview(data);
         };
 
-        _renderSkillMatrixInto(document.getElementById('candidateModalSkills'), data);
-        _renderProjectsInto(document.getElementById('candidateModalProjects'), data, {modal: true});
+        _fillBulletList('candidateModalFocus', data.professional_focus);
+        _fillBulletList('candidateModalEducation', data.education_certificates);
+        _fillBulletList('candidateModalIndustries', data.industries);
+        _fillLanguages('candidateModalLanguages', data.languages);
+        _fillBackground('candidateModalBackground', data.professional_background);
+        _fillExperience('candidateModalExperience', data.relevant_experience);
 
         await renderCandidateVersions(id);
 

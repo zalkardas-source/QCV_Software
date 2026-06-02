@@ -245,25 +245,42 @@
                             </div>
                         </div>
                         
-                        <!-- Summary -->
+                        <!-- Professional Focus -->
                         <div class="mt-8 pt-6 border-t border-slate-200">
-                            <h4 class="font-semibold text-slate-800 mb-3">Professional Summary</h4>
-                            <p id="previewSummary" class="text-sm text-slate-600 italic line-clamp-4 leading-relaxed">-</p>
+                            <h4 class="font-semibold text-slate-800 mb-3 uppercase text-xs tracking-widest text-brand-blue">Professional Focus</h4>
+                            <ul id="previewFocus" class="text-sm text-slate-700 space-y-1.5 list-disc pl-5"></ul>
                         </div>
 
+                        <!-- Personal Background -->
                         <div class="mt-8 pt-6 border-t border-slate-200">
-                            <h4 class="font-semibold text-slate-800 mb-3">Top Skills</h4>
-                            <div id="previewSkills" class="flex flex-wrap gap-2">
-                                <!-- Skills injected here -->
+                            <h4 class="font-semibold text-slate-800 mb-3 uppercase text-xs tracking-widest text-brand-blue">Personal Background</h4>
+
+                            <div class="mb-4">
+                                <div class="text-xs font-bold text-slate-700 mb-1.5">Education / Certificates</div>
+                                <ul id="previewEducation" class="text-sm text-slate-600 list-disc pl-5 space-y-1"></ul>
+                            </div>
+
+                            <div class="mb-4">
+                                <div class="text-xs font-bold text-slate-700 mb-1.5">Industries</div>
+                                <ul id="previewIndustries" class="text-sm text-slate-600 list-disc pl-5 space-y-1"></ul>
+                            </div>
+
+                            <div>
+                                <div class="text-xs font-bold text-slate-700 mb-1.5">Languages</div>
+                                <ul id="previewLanguages" class="text-sm text-slate-600 list-disc pl-5 space-y-1"></ul>
                             </div>
                         </div>
 
-                        <!-- Projects -->
+                        <!-- Professional Background (chronological) -->
                         <div class="mt-8 pt-6 border-t border-slate-200">
-                            <h4 class="font-semibold text-slate-800 mb-3">Key Projects</h4>
-                            <div id="previewProjects" class="space-y-4">
-                                <!-- Projects injected here -->
-                            </div>
+                            <h4 class="font-semibold text-slate-800 mb-3 uppercase text-xs tracking-widest text-brand-blue">Professional Background</h4>
+                            <div id="previewBackground" class="space-y-3 text-sm text-slate-700"></div>
+                        </div>
+
+                        <!-- Relevant Experience -->
+                        <div class="mt-8 pt-6 border-t border-slate-200">
+                            <h4 class="font-semibold text-slate-800 mb-3 uppercase text-xs tracking-widest text-brand-blue">Relevant Experience</h4>
+                            <div id="previewExperience" class="space-y-3 text-sm"></div>
                         </div>
                     </div>
                 </div>
@@ -456,16 +473,40 @@
                 </div>
             </div>
             <div class="overflow-y-auto flex-1 p-6">
-                <p id="candidateModalSummary" class="text-sm text-slate-600 italic mb-5"></p>
-                <div class="mb-5">
-                    <h3 class="font-semibold text-slate-800 mb-3">Skills</h3>
-                    <div id="candidateModalSkills" class="space-y-4"></div>
+                <p id="candidateModalRole" class="text-sm font-bold text-brand-blue uppercase tracking-wide mb-5"></p>
+
+                <div class="mb-6">
+                    <h3 class="font-bold text-brand-blue uppercase text-xs tracking-widest mb-3 pb-1 border-b border-brand-blue/30">Professional Focus</h3>
+                    <ul id="candidateModalFocus" class="text-sm text-slate-700 list-disc pl-5 space-y-1"></ul>
                 </div>
-                <div class="mb-5">
-                    <h3 class="font-semibold text-slate-800 mb-3">Erfahrung &amp; Projekte</h3>
-                    <div id="candidateModalProjects" class="space-y-3"></div>
+
+                <div class="mb-6">
+                    <h3 class="font-bold text-brand-blue uppercase text-xs tracking-widest mb-3 pb-1 border-b border-brand-blue/30">Personal Background</h3>
+                    <div class="mb-3">
+                        <div class="text-xs font-bold text-slate-700 mb-1">Education / Certificates</div>
+                        <ul id="candidateModalEducation" class="text-sm text-slate-600 list-disc pl-5 space-y-1"></ul>
+                    </div>
+                    <div class="mb-3">
+                        <div class="text-xs font-bold text-slate-700 mb-1">Industries</div>
+                        <ul id="candidateModalIndustries" class="text-sm text-slate-600 list-disc pl-5 space-y-1"></ul>
+                    </div>
+                    <div>
+                        <div class="text-xs font-bold text-slate-700 mb-1">Languages</div>
+                        <ul id="candidateModalLanguages" class="text-sm text-slate-600 list-disc pl-5 space-y-1"></ul>
+                    </div>
                 </div>
-                <div id="candidateModalVersionsWrap" class="hidden">
+
+                <div class="mb-6">
+                    <h3 class="font-bold text-brand-blue uppercase text-xs tracking-widest mb-3 pb-1 border-b border-brand-blue/30">Professional Background</h3>
+                    <div id="candidateModalBackground" class="space-y-3 text-sm text-slate-700"></div>
+                </div>
+
+                <div class="mb-6">
+                    <h3 class="font-bold text-brand-blue uppercase text-xs tracking-widest mb-3 pb-1 border-b border-brand-blue/30">Relevant Experience</h3>
+                    <div id="candidateModalExperience" class="space-y-3 text-sm"></div>
+                </div>
+
+                <div id="candidateModalVersionsWrap" class="hidden mt-6 pt-6 border-t border-slate-200">
                     <h3 class="font-semibold text-slate-800 mb-3">
                         Versionen <span id="candidateModalVersionsCount" class="text-xs font-normal text-slate-500"></span>
                     </h3>

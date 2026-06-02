@@ -169,31 +169,37 @@ def test_one_pager_template_renders_with_full_data():
     assert "Relevant Experience" in html
 
 
-def test_full_cv_template_renders_classic_portrait_layout():
-    """The full CV template is the legacy portrait layout — Personal Data
-    table, Professional Summary, Education, Languages, Core Skills,
-    Professional Experience. New BearingPoint fields are NOT consumed here."""
+def test_full_cv_template_renders_portrait_with_new_sections():
+    """The full CV is portrait single-column, but uses the same section
+    structure as the one-pager (Professional Focus, Personal Background,
+    Professional Background, Relevant Experience). All entries, no caps."""
     env = Environment(loader=FileSystemLoader(TEMPLATE_DIR))
     template = env.get_template("cv_full.html")
     html = template.render(
         full_name="John Smith",
-        job_title="Senior SAP Consultant",
+        role_title="Senior SAP Consultant",
         personal_rows=[{"label": "E-Mail", "value": "j.smith@example.com"},
                        {"label": "Location", "value": "Berlin"}],
-        summary="Senior SAP consultant with 15 years experience.",
-        education=["TU Munich, Computer Science"],
-        certifications=[],
-        hobbies=[],
-        languages=["English (fluent)", "German (native)"],
-        skill_lines=[{"category": "SAP", "skills": "SAP MM, SAP SD"}],
-        projects=[{"header": "Project Alpha (2020-2022)", "description": "Full S/4HANA rollout."}],
+        professional_focus=["Expert in SAP MM/SD", "ABAP development"],
+        education_certificates=["TU Munich, Computer Science"],
+        industries=["Automotive", "Manufacturing"],
+        languages=[{"name": "English", "level": "fluent"}],
+        professional_background=[
+            {"duration": "2018-present", "company": "Quatelio", "role": "Senior Consultant", "note": None}
+        ],
+        relevant_experience=[
+            {"client_label": "Leading German automotive supplier", "description": "S/4HANA rollout."}
+        ],
     )
     assert "John Smith" in html
+    assert "Senior SAP Consultant" in html
     assert "j.smith@example.com" in html
     assert "Berlin" in html
-    assert "Senior SAP consultant" in html
-    assert "Project Alpha" in html
-    assert "Full S/4HANA rollout" in html
+    assert "Expert in SAP MM/SD" in html
+    assert "TU Munich" in html
+    assert "Automotive" in html
+    assert "Leading German automotive supplier" in html
+    assert "S/4HANA rollout" in html
 
 
 def test_prepare_context_caps_to_one_pager_limits():
@@ -211,21 +217,25 @@ def test_prepare_context_caps_to_one_pager_limits():
     assert len(ctx["professional_focus"]) <= 5
 
 
-def test_prepare_full_cv_context_passes_all_projects():
-    """Full CV keeps the legacy fields (personal_rows, projects, skill_lines,
-    languages) and does NOT cap project count."""
+def test_prepare_full_cv_context_does_not_cap_new_fields():
+    """Full CV has NO caps — every entry the LLM produced gets through.
+    Uses the same field shape as the one-pager (cascade design)."""
     data = {
         "personal_information": {"full_name": "Test", "email": "t@example.com"},
-        "small_summary": "Summary text.",
-        "projects": [{"name": f"P{i}", "duration": f"202{i}-202{i+1}", "industry": "Tech",
-                       "description": f"desc {i}"} for i in range(15)],
-        "skill_matrix": [{"category": "SAP", "skills": [{"skill": "SAP MM", "rating": 8}]}],
+        "role_title": "Test Role",
+        "professional_focus": [f"bullet {i}" for i in range(20)],
+        "relevant_experience": [{"client_label": f"Client {i}", "description": "x"} for i in range(20)],
+        "professional_background": [{"duration": f"{i}", "company": "X", "role": "Y"} for i in range(20)],
+        "education_certificates": [f"Cert {i}" for i in range(10)],
+        "industries": [f"Ind {i}" for i in range(8)],
         "languages": [{"name": "English", "level": "fluent"}],
     }
     ctx = _prepare_full_cv_context(data)
-    assert "personal_rows" in ctx
-    assert "projects" in ctx
-    assert len(ctx["projects"]) == 15
-    assert "skill_lines" in ctx
-    assert ctx["skill_lines"][0]["category"] == "SAP"
-    assert ctx["languages"] == ["English (fluent)"]
+    assert ctx["role_title"] == "Test Role"
+    assert len(ctx["professional_focus"]) == 20
+    assert len(ctx["relevant_experience"]) == 20
+    assert len(ctx["professional_background"]) == 20
+    assert len(ctx["education_certificates"]) == 10
+    assert len(ctx["industries"]) == 8
+    # personal_rows still derived from personal_information
+    assert any(r["label"] == "E-Mail" for r in ctx["personal_rows"])

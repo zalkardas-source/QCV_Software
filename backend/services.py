@@ -489,8 +489,9 @@ def structure_cv_data(raw_markdown: str) -> dict:
        Avoid character soft skills (Teamfähigkeit, Belastbarkeit). Avoid
        restating individual project content — those go into relevant_experience.
 
-   10. RELEVANT_EXPERIENCE — 6-10 curated project bullets for the right
-       column. Each entry:
+   10. RELEVANT_EXPERIENCE — One bullet per project the candidate has worked
+       on (max 25), most recent first. The same list is the backbone of the
+       Full CV (all of them) and the one-pager (top 6 only). Each entry:
        - `client_label`: bold lead for the bullet.
          * If the CV names the client explicitly (e.g. "BMW Group", "BioNTech",
            "Animex", "Lek S.A.") and there is no obvious NDA marker → use the
@@ -506,11 +507,13 @@ def structure_cv_data(raw_markdown: str) -> dict:
          and the candidate's role.
          Example: "SAP S/4HANA implementation, PP/QM module. Pre-implementation
          analysis, system configuration, user training."
-       Order: most impressive / most recent first. Pick projects that best
-       showcase the candidate's specialization — NOT every project in the CV.
+       Order: most recent first. Include every project from the CV — the
+       Full CV needs the full chronology. Skip only truly trivial entries
+       (e.g. a 1-month internship with no description).
 
-   11. PROFESSIONAL_BACKGROUND — Chronological work history, most recent first,
-       max 8 entries. Each entry:
+   11. PROFESSIONAL_BACKGROUND — Chronological work history (employment
+       stations, NOT individual projects), most recent first, max 15 entries.
+       Each entry:
        - `duration`: date range exactly as the CV writes it ("03/2018 – present",
          "04/2014 – 03/2018", "2020-2022"). Keep separators consistent.
        - `company`: employer name verbatim.

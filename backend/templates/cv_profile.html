@@ -1,248 +1,341 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<title>{{ full_name }} — CV Profile</title>
+<meta charset="utf-8" />
+<title>{{ full_name }} — One-Pager</title>
 <style>
     @page {
         size: A4 landscape;
-        margin: 12mm 14mm 10mm 14mm;
-
-        @bottom-right {
-            content: "Quatelio CVision";
-            font-family: "DejaVu Sans", "Helvetica", "Arial", sans-serif;
-            font-size: 7pt;
-            color: #9ca3af;
+        margin: 9mm 11mm 8mm 11mm;
+        @bottom-center {
+            content: counter(page);
+            font-family: 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+            font-size: 8pt;
+            color: #94a3b8;
         }
     }
-
     * { box-sizing: border-box; }
-
-    body {
-        font-family: "DejaVu Sans", "Helvetica", "Arial", sans-serif;
-        font-size: 8.5pt;
-        color: #1e1e23;
-        line-height: 1.35;
-        margin: 0;
-    }
-
-    /* ── Top section: photo | identity + summary | skills ── */
-    .top {
-        display: grid;
-        grid-template-columns: 45mm 95mm 1fr;
-        gap: 6mm;
-        margin-bottom: 4mm;
-    }
-    /* No-photo variant: identity absorbs the photo's space, skills stays right. */
-    .top.top--no-photo {
-        grid-template-columns: 140mm 1fr;
-    }
-
-    /* Column 1: Photo (rendered only when a photo is available) */
-    .photo-col {
-        text-align: center;
-    }
-    .hero-photo {
-        width: 42mm;
-        height: 52mm;
-        object-fit: cover;
-        border: 0.3mm solid #d1d5db;
-    }
-
-    /* Column 2: Identity + summary */
-    .identity-name {
-        font-size: 18pt;
-        font-weight: 600;
-        color: #1e1e23;
-        line-height: 1.05;
-        margin: 0;
-    }
-    .identity-role {
-        font-size: 9.5pt;
-        color: #00569c;
-        font-weight: 600;
-        letter-spacing: 0.3pt;
-        margin-top: 1mm;
-        margin-bottom: 3mm;
-    }
-    .summary {
-        color: #414147;
-        text-align: justify;
-        margin-bottom: 3mm;
-        line-height: 1.4;
-    }
-
-    /* Generic section heading (left + right cols) */
-    .section-title {
-        font-size: 8.5pt;
-        font-weight: bold;
-        color: #00569c;
-        letter-spacing: 1pt;
-        text-transform: uppercase;
-        margin-top: 2mm;
-        margin-bottom: 1.5mm;
-        padding-bottom: 0.5mm;
-        border-bottom: 0.3mm solid #00569c;
-    }
-
-    /* Column 3: Skills (skill groups with dots) */
-    .skills {
-        column-count: 1;
-    }
-    .skill-group {
-        margin-bottom: 2.5mm;
-        break-inside: avoid;
-    }
-    .skill-group-name {
-        font-size: 7pt;
-        font-weight: bold;
-        color: #6b7280;
-        text-transform: uppercase;
-        letter-spacing: 0.5pt;
-        margin-bottom: 0.8mm;
-    }
-    .skill-row {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        font-size: 8pt;
-        margin-bottom: 0.8mm;
-        color: #1e1e23;
-    }
-    .skill-row .name {
-        flex: 1;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-        padding-right: 2mm;
-    }
-    .skill-row .dots {
-        white-space: nowrap;
-        font-size: 0;
-        flex-shrink: 0;
-    }
-    .skill-row .dot {
-        display: inline-block;
-        width: 1.4mm;
-        height: 1.4mm;
-        border-radius: 50%;
-        background: #e1e6ee;
-        margin-left: 0.4mm;
-    }
-    .skill-row .dot.filled {
-        background: #00569c;
-    }
-
-    /* ── Professional experience (full width below the top section) ── */
-    .experience-section {
-        margin-top: 1mm;
-    }
-    .experience-section .section-title {
-        margin-top: 0;
-    }
-    .experience-list {
-        list-style: none;
+    html, body {
         margin: 0;
         padding: 0;
+        height: 100%;
+        font-family: 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+        color: #1e1e23;
+        font-size: 9pt;
+        line-height: 1.32;
     }
-    .experience-item {
+    body {
+        display: flex;
+        flex-direction: column;
+    }
+
+    /* ── HEADER ─────────────────────────────────────────────────
+       The header is a SHORT strip (32mm) holding the name+role and the
+       logo. The photo is absolutely positioned at the top-left and is
+       intentionally TALLER than the header (54mm), so it sticks down
+       into the body area of the page — directly into the left column.
+       The Personal Background box then sits below that overhanging
+       photo via margin-top on .col-left .box, while the middle/right
+       boxes start at the (high) body top. Result: the staggered
+       BearingPoint top line.                                            */
+    .header {
         position: relative;
-        padding-left: 4mm;
-        margin-bottom: 1.5mm;
-        break-inside: avoid;
+        flex: 0 0 auto;
+        height: 32mm;
+        padding-bottom: 4mm;
     }
-    .experience-item::before {
-        content: "";
+    .header .photo,
+    .header .photo-placeholder {
         position: absolute;
+        top: 0;
         left: 0;
-        top: 1.1mm;
-        width: 1.4mm;
-        height: 1.4mm;
-        border-radius: 50%;
-        background: #00569c;
+        width: 38mm;
+        height: 54mm;
+        background: #e1e6ee;
+        border-radius: 0.6mm;
+        object-fit: cover;
+        z-index: 1;
     }
-    .experience-name {
-        font-weight: bold;
+    .header .photo-placeholder {
+        background: #00569c;
+        color: white;
+        font-weight: 700;
+        font-size: 30pt;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .header .name-block {
+        margin-left: 44mm;
+        padding-top: 4mm;
+    }
+    .header .name {
+        font-size: 22pt;
+        font-weight: 400;
+        color: #1e1e23;
+        line-height: 1.1;
+        margin: 0;
+    }
+    .header .role {
+        font-size: 13pt;
+        font-weight: 700;
+        color: #00569c;
+        margin: 1.5mm 0 0 0;
+    }
+    .header .logo {
+        position: absolute;
+        right: 0;
+        top: 0;
+        height: 15mm;
+        width: auto;
+    }
+    .header .logo-text {
+        position: absolute;
+        right: 0;
+        top: 4mm;
+        font-weight: 700;
+        font-size: 13pt;
+        color: #00569c;
+        letter-spacing: 0.2pt;
+    }
+
+    /* ── 3-COLUMN BODY ──────────────────────────────────────── */
+    /* Body fills the remaining page height (after header). Each column is a
+       flex container; the last box in every column stretches to fill the
+       column — that's what makes the BearingPoint look: borders run all the
+       way to the bottom of the page, no matter how much content there is. */
+    .body {
+        flex: 1 1 auto;
+        display: grid;
+        grid-template-columns: 1fr 1.2fr 1.4fr;
+        gap: 4mm;
+        min-height: 0;
+    }
+    .col {
+        display: flex;
+        flex-direction: column;
+        gap: 3mm;
+        min-height: 0;
+    }
+    .col > .box:last-child {
+        flex: 1 1 auto;
+    }
+    /* Left column starts LOWER so its top edge sits BELOW the photo that
+       overhangs from the header. Math: header 32mm + box-title overhang
+       2.4mm = 34.4mm baseline; photo is 54mm tall → 19.6mm overhang; we
+       want at least 4-5mm of clean gap between the photo bottom and the
+       box-title's red notch, so 28mm margin-top puts the box top at
+       Y=60mm with a comfortable 6mm clearance from the photo. */
+    .col-left > .box:first-child {
+        margin-top: 28mm;
+    }
+
+    /* ── NOTCHED BOX ────────────────────────────────────────── */
+    /* NO page-break-inside:avoid here. When the box content overflows,
+       WeasyPrint would otherwise keep the top border on page 1 while the
+       trailing items render on page 2 outside any box — that's the
+       "border ends mid-content" artefact we saw on real CVs. Letting the
+       box split cleanly is uglier in theory but never happens in
+       practice because the data caps + description truncation keep
+       everything on one page. */
+    .box {
+        position: relative;
+        border: 0.25mm solid #00569c;
+        padding: 3.5mm 3.5mm 3mm 3.5mm;
+    }
+    .box-title {
+        position: absolute;
+        top: -2.4mm;
+        left: 3mm;
+        background: white;
+        color: #1e1e23;
+        font-weight: 700;
+        font-size: 9pt;
+        padding: 0 2mm;
+        white-space: nowrap;
+    }
+
+    .subhead {
+        font-weight: 700;
+        font-size: 9.5pt;
+        color: #1e1e23;
+        margin: 0 0 1.5mm 0;
+    }
+
+    /* Personal Background subsections are stacked top-down with moderate
+       breathing room between them. The taller header + larger photo
+       absorb some vertical space, so the box doesn't need to stretch as
+       much — leftover whitespace at the bottom is small and acceptable. */
+    .personal-background {
+        padding: 5mm 4mm 4mm 4mm;
+    }
+    .personal-background .subsection {
+        margin-bottom: 5mm;
+    }
+    .personal-background .subsection:last-child {
+        margin-bottom: 0;
+    }
+
+    /* ── LISTS ──────────────────────────────────────────────── */
+    ul {
+        margin: 0;
+        padding-left: 3.2mm;
+        list-style: none;
+    }
+    li {
+        position: relative;
+        padding-left: 0;
+        margin-bottom: 0.9mm;
+        line-height: 1.32;
+    }
+    li::before {
+        content: "•";
+        color: #00569c;
+        position: absolute;
+        left: -2.5mm;
+        font-weight: 700;
+    }
+
+    .exp-item {
+        margin-bottom: 1.4mm;
+        line-height: 1.3;
+        page-break-inside: avoid;
+    }
+    .exp-item .client {
+        font-weight: 700;
         color: #1e1e23;
     }
-    .experience-context {
-        color: #00569c;
-        font-weight: 600;
-        margin-left: 2mm;
-    }
-    .experience-description {
+    .exp-item .desc {
         color: #414147;
-        line-height: 1.35;
+    }
+
+    .bg-item {
+        margin-bottom: 1.1mm;
+        line-height: 1.28;
+    }
+    .bg-item .when {
+        font-weight: 600;
+        color: #1e1e23;
+    }
+    .bg-item .who {
+        color: #414147;
+    }
+
+    .lang-level {
+        color: #6b7280;
     }
 </style>
 </head>
 <body>
 
-<div class="top{% if not photo_data_url %} top--no-photo{% endif %}">
-
+<div class="header">
     {% if photo_data_url %}
-    <div class="photo-col">
-        <img class="hero-photo" src="{{ photo_data_url }}" alt="{{ full_name }}">
-    </div>
+        <img class="photo" src="{{ photo_data_url }}" alt="" />
+    {% else %}
+        <div class="photo-placeholder">{{ initials }}</div>
     {% endif %}
 
-    <div class="identity-col">
-        <div class="identity-name">{{ full_name }}</div>
-        {% if job_title %}
-        <div class="identity-role">{{ job_title }}</div>
-        {% endif %}
-
-        {% if summary %}
-        <div class="summary">{{ summary }}</div>
+    <div class="name-block">
+        <h1 class="name">{{ full_name }}</h1>
+        {% if role_title %}
+            <div class="role">{{ role_title }}</div>
         {% endif %}
     </div>
 
-    <div class="skills-col">
-        {% if skill_matrix or languages %}
-        <div class="section-title">Skills</div>
-        <div class="skills">
-            {% for group in skill_matrix %}
-            <div class="skill-group">
-                <div class="skill-group-name">{{ group.category }}</div>
-                {% for skill in group.skills %}
-                <div class="skill-row">
-                    <span class="name">{{ skill.skill }}</span>
-                    <span class="dots">
-                        {% set r = skill.rating_int %}
-                        {% for i in range(10) %}<span class="dot {% if i < r %}filled{% endif %}"></span>{% endfor %}
-                    </span>
+    {% if logo_data_url %}
+        <img class="logo" src="{{ logo_data_url }}" alt="Quatelio" />
+    {% else %}
+        <div class="logo-text">Quatelio</div>
+    {% endif %}
+</div>
+
+<div class="body">
+
+    {# ── LEFT: Personal Background ───────────────────────────── #}
+    <div class="col col-left">
+        <div class="box personal-background">
+            <div class="box-title">Personal Background</div>
+
+            {% if education_certificates %}
+                <div class="subsection">
+                    <div class="subhead">Education / Certificates</div>
+                    <ul>
+                    {% for entry in education_certificates %}
+                        <li>{{ entry }}</li>
+                    {% endfor %}
+                    </ul>
                 </div>
-                {% endfor %}
-            </div>
-            {% endfor %}
-            {% if languages %}
-            <div class="skill-group">
-                <div class="skill-group-name">Languages</div>
-                {% for lang in languages %}
-                <div class="skill-row">
-                    <span class="name">{{ lang.name }}{% if lang.level %} <span style="color:#94a3b8">({{ lang.level }})</span>{% endif %}</span>
-                </div>
-                {% endfor %}
-            </div>
             {% endif %}
+
+            {% if industries %}
+                <div class="subsection">
+                    <div class="subhead">Industries</div>
+                    <ul>
+                    {% for ind in industries %}
+                        <li>{{ ind }}</li>
+                    {% endfor %}
+                    </ul>
+                </div>
+            {% endif %}
+
+            {% if languages %}
+                <div class="subsection">
+                    <div class="subhead">Languages</div>
+                    <ul>
+                    {% for lang in languages %}
+                        <li>
+                            {{ lang.name }}
+                            {%- if lang.level %} <span class="lang-level">({{ lang.level }})</span>{% endif %}
+                        </li>
+                    {% endfor %}
+                    </ul>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+
+    {# ── MIDDLE: Focus + Background ──────────────────────────── #}
+    <div class="col">
+        {% if professional_focus %}
+        <div class="box">
+            <div class="box-title">Professional Focus</div>
+            <ul>
+            {% for bullet in professional_focus %}
+                <li>{{ bullet }}</li>
+            {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+
+        {% if professional_background %}
+        <div class="box">
+            <div class="box-title">Professional Background</div>
+            {% for entry in professional_background %}
+                <div class="bg-item">
+                    <span class="when">{{ entry.duration }}</span>
+                    {% if entry.company %} — <span class="who">{{ entry.company }}</span>{% endif %}
+                    {% if entry.role %} — <span class="who">{{ entry.role }}</span>{% endif %}
+                </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+    </div>
+
+    {# ── RIGHT: Relevant Experience ──────────────────────────── #}
+    <div class="col">
+        {% if relevant_experience %}
+        <div class="box">
+            <div class="box-title">Relevant Experience</div>
+            {% for item in relevant_experience %}
+                <div class="exp-item">
+                    <span class="client">{{ item.client_label }}</span>{% if item.description %} <span class="desc">— {{ item.description }}</span>{% endif %}
+                </div>
+            {% endfor %}
         </div>
         {% endif %}
     </div>
 
 </div>
-
-{% if projects %}
-<div class="experience-section">
-    <div class="section-title">Professional Experience</div>
-    <ul class="experience-list">
-        {% for proj in projects %}
-        <li class="experience-item">
-            <span class="experience-name">{{ proj.name or "Position" }}</span>{% if proj.context %}<span class="experience-context">— {{ proj.context }}</span>{% endif %}{% if proj.description %}<span class="experience-description">: {{ proj.description }}</span>{% endif %}
-        </li>
-        {% endfor %}
-    </ul>
-</div>
-{% endif %}
 
 </body>
 </html>

@@ -3,35 +3,38 @@ import re
 from datetime import datetime
 from pathlib import Path
 from jinja2 import Environment, FileSystemLoader, select_autoescape
-from weasyprint import HTML
+
+
+def _weasy_html():
+    """Lazy import of weasyprint.HTML so tests / context-builders can run
+    without WeasyPrint installed (e.g. on Windows where Cairo/Pango DLLs
+    aren't always set up). Only the actual PDF write needs it."""
+    from weasyprint import HTML  # noqa: WPS433
+    return HTML
 
 _TEMPLATE_DIR = Path(__file__).parent / "templates"
+_STATIC_DIR = Path(__file__).parent / "static"
+_PHOTO_STORAGE_DIR = Path(__file__).resolve().parent / "data" / "photos"
+
 _DESCRIPTION_SCORE_CAP = 500
 _ONGOING_TOKENS = ("present", "current", "now", "today", "heute", "laufend", "aktuell")
 _YEAR_RE = re.compile(r"\b(?:19|20)\d{2}\b")
 _SENTENCE_BOUNDARY = re.compile(r"(?<=[.!?])\s+")
 
 # One-pager constraints (landscape A4, must fit one page).
-# Project descriptions are intentionally NOT truncated — five full
-# descriptions fill the bottom half of the page (Quatelio house style).
-_ONEPAGER_MAX_PROJECTS = 5
-_ONEPAGER_SUMMARY_SENTENCES = 4     # fills the middle-column gap under the name
-_MIN_RATING_FOR_PDF = 8             # skills block: only ratings 8+ unless boosted
-_MAX_SKILLS_PER_CATEGORY = 4        # tighter pitch: top 4 per category
-_MAX_TOTAL_SKILLS = 12              # hard cap across all categories
-
-# Display order for the unified Skills matrix (dots, rating-sorted per group).
-# "Communication & Training" intentionally omitted — generic noise (Trainings, Workshops).
-# "Languages" handled separately in the photo column, not in the skills matrix.
-_SKILL_ORDER = (
-    "Programming Languages",
-    "Frameworks & Libraries",
-    "Databases",
-    "Tools & Platforms",
-    "SAP",
-    "Data & Analytics",
-    "Methods & Frameworks",
-)
+# Caps modelled on the BearingPoint reference profiles — they pack ~8 short
+# experience bullets, ~5 background rows, ~5-6 focus bullets per page. The
+# flex layout (last box in each column stretches) means even sparser CVs
+# look "full" because borders run to the page bottom.
+_ONEPAGER_MAX_RELEVANT_EXPERIENCE = 7
+_ONEPAGER_MAX_BACKGROUND = 5
+_ONEPAGER_MAX_FOCUS = 6
+_ONEPAGER_MAX_EDUCATION = 5
+_ONEPAGER_MAX_INDUSTRIES = 5
+# Per-entry length cap for the one-pager (in characters). Long descriptions
+# (8-10 lines) from the LLM cause page overflow. Truncate at word boundary
+# with an ellipsis. Short enough that ~7 experience bullets fit comfortably.
+_ONEPAGER_DESCRIPTION_MAX_CHARS = 180
 
 _env = Environment(
     loader=FileSystemLoader(_TEMPLATE_DIR),
@@ -39,20 +42,9 @@ _env = Environment(
 )
 
 
-def _normalize_rating(value) -> int:
-    try:
-        r = int(value)
-    except (TypeError, ValueError):
-        return 0
-    return max(0, min(10, r))
-
-
 def _score_project(p: dict) -> tuple[int, int]:
-    """Return (recency_year, capped_description_length). Higher = more 'ideal'.
-
-    Recency wins; description length is a tiebreaker so projects with substance
-    rank above one-liners from the same year.
-    """
+    """Return (recency_year, capped_description_length). Used to sort projects
+    most-recent first for the heuristic backfill."""
     duration = (p.get("duration") or "").lower()
     if any(token in duration for token in _ONGOING_TOKENS):
         recency = datetime.now().year
@@ -61,19 +53,6 @@ def _score_project(p: dict) -> tuple[int, int]:
         recency = max((int(y) for y in years), default=0)
     desc_len = min(len(p.get("description") or ""), _DESCRIPTION_SCORE_CAP)
     return (recency, desc_len)
-
-
-def _short_summary(text: str, max_sentences: int) -> str:
-    """Return the first N sentences of a longer summary, intact.
-
-    The DB stores a detailed 4-6 sentence summary; the one-pager only shows the
-    headline portion. Splits on sentence-ending punctuation followed by whitespace
-    so we never cut a sentence mid-word.
-    """
-    if not text:
-        return ""
-    sentences = _SENTENCE_BOUNDARY.split(text.strip())
-    return " ".join(sentences[:max_sentences]).strip()
 
 
 def _make_initials(full_name: str) -> str:
@@ -85,99 +64,104 @@ def _make_initials(full_name: str) -> str:
     return (parts[0][0] + parts[-1][0]).upper()
 
 
-def _prepare_context(data: dict) -> dict:
-    """Build the one-pager (landscape) context.
+def _split_sentences(text: str, max_count: int) -> list[str]:
+    if not text:
+        return []
+    sentences = [s.strip() for s in _SENTENCE_BOUNDARY.split(text.strip()) if s.strip()]
+    return sentences[:max_count]
 
-    Personal data (email, phone, etc.) is intentionally OMITTED — the
-    one-pager goes to clients and Quatelio's house style keeps contact
-    info out. The Full-CV is the place for those details.
+
+def _truncate_at_word(text: str, max_chars: int) -> str:
+    """Truncate text at the nearest word boundary <= max_chars, append '…'.
+    Returns text unchanged if already short enough.
     """
-    personal = data.get("personal_information", {}) or {}
-    full_name = personal.get("full_name") or "Candidate Profile"
+    if not text or len(text) <= max_chars:
+        return text or ""
+    cut = text[:max_chars].rsplit(" ", 1)[0]
+    return cut.rstrip(",.;:– -") + "…"
 
-    raw_projects = [p for p in (data.get("projects") or []) if isinstance(p, dict)]
-    sorted_projects = sorted(raw_projects, key=_score_project, reverse=True)
 
-    # Job title = name of the most-recent project (the LLM uses `name` as the
-    # role/title). Fallback to a neutral placeholder.
-    job_title = ""
-    for p in sorted_projects:
-        if p.get("name"):
-            job_title = p["name"]
-            break
+def _backfill_new_fields(data: dict) -> dict:
+    """Derive sensible defaults for the new layout's fields when an old CV
+    (pre-redesign) is being rendered. Mutates `data` in-place and returns it.
 
-    # Unified Skills matrix: dots, configured categories, rating ≥ threshold,
-    # sorted by rating desc, with per-category and total caps for one-page fit.
-    skill_groups: dict[str, list[dict]] = {}
-    for group in data.get("skill_matrix", []) or []:
-        if not isinstance(group, dict):
-            continue
-        category = group.get("category") or ""
-        if category not in _SKILL_ORDER:
-            continue
-        for s in group.get("skills", []) or []:
-            if not isinstance(s, dict):
+    Old snapshots in cv_versions.snapshot_json predate role_title / professional_focus
+    / relevant_experience / professional_background / education_certificates /
+    industries — without backfill the new templates would show empty middle and
+    right columns.
+
+    Heuristics:
+    - role_title  ← projects[0].name (already what the old one-pager used)
+    - industries  ← deduped projects[].industry
+    - relevant_experience ← projects[].{industry-or-name, description}
+    - professional_background ← projects[].{duration, name as role, "" as company}
+                                (legacy Project schema has no `company` field)
+    - professional_focus ← first sentences of small_summary
+    - education_certificates ← left empty (no source in legacy data)
+    """
+    projects_sorted = sorted(
+        [p for p in (data.get("projects") or []) if isinstance(p, dict)],
+        key=_score_project,
+        reverse=True,
+    )
+
+    if not (data.get("role_title") or "").strip() if isinstance(data.get("role_title"), str) else not data.get("role_title"):
+        for p in projects_sorted:
+            if p.get("name"):
+                data["role_title"] = p["name"]
+                break
+
+    if not data.get("industries"):
+        seen: set[str] = set()
+        industries: list[str] = []
+        for p in projects_sorted:
+            ind = (p.get("industry") or "").strip()
+            if ind and ind.lower() not in seen:
+                seen.add(ind.lower())
+                industries.append(ind)
+        data["industries"] = industries
+
+    if not data.get("relevant_experience"):
+        re_items: list[dict] = []
+        for p in projects_sorted:
+            label = (p.get("industry") or p.get("name") or "Project").strip()
+            description = (p.get("description") or "").strip()
+            if not description:
                 continue
-            name = (s.get("skill") or "").strip()
-            if not name:
+            re_items.append({"client_label": label, "description": description})
+        data["relevant_experience"] = re_items
+
+    if not data.get("professional_background"):
+        bg_items: list[dict] = []
+        for p in projects_sorted:
+            duration = (p.get("duration") or "").strip()
+            role = (p.get("name") or "").strip()
+            if not (duration or role):
                 continue
-            rating = _normalize_rating(s.get("rating"))
-            if rating < _MIN_RATING_FOR_PDF:
-                continue
-            skill_groups.setdefault(category, []).append(
-                {"skill": name, "rating_int": rating}
-            )
+            bg_items.append({
+                "duration": duration or "—",
+                "company": "",
+                "role": role or "—",
+                "note": None,
+            })
+        data["professional_background"] = bg_items
 
-    skill_matrix = []
-    total_skills = 0
-    for cat in _SKILL_ORDER:
-        if total_skills >= _MAX_TOTAL_SKILLS:
-            break
-        skills = skill_groups.get(cat) or []
-        if not skills:
-            continue
-        skills.sort(key=lambda x: x["rating_int"], reverse=True)
-        remaining = _MAX_TOTAL_SKILLS - total_skills
-        take = min(len(skills), _MAX_SKILLS_PER_CATEGORY, remaining)
-        skill_matrix.append({"category": cat, "skills": skills[:take]})
-        total_skills += take
+    if not data.get("professional_focus"):
+        sentences = _split_sentences(data.get("small_summary") or "", _ONEPAGER_MAX_FOCUS)
+        data["professional_focus"] = sentences
 
-    top_projects = sorted_projects[:_ONEPAGER_MAX_PROJECTS]
-    projects = [
-        {
-            "name": p.get("name", ""),
-            "context": (p.get("industry") or p.get("location") or "").strip(),
-            "description": (p.get("description") or "").strip(),
-        }
-        for p in top_projects
-    ]
+    if "education_certificates" not in data or data["education_certificates"] is None:
+        data["education_certificates"] = []
 
-    languages = [
-        {"name": (l.get("name") or "").strip(), "level": (l.get("level") or "").strip()}
-        for l in (data.get("languages") or [])
-        if isinstance(l, dict) and (l.get("name") or "").strip()
-    ]
-
-    return {
-        "full_name": full_name,
-        "initials": _make_initials(full_name),
-        "job_title": job_title,
-        "summary": _short_summary(data.get("small_summary", "") or "", _ONEPAGER_SUMMARY_SENTENCES),
-        "skill_matrix": skill_matrix,
-        "languages": languages,
-        "projects": projects,
-    }
-
-
-_PHOTO_STORAGE_DIR = Path(__file__).resolve().parent / "data" / "photos"
+    return data
 
 
 def _photo_to_data_url(photo_path: str | Path | None) -> str | None:
-    """Encode a stored JPEG into a data: URL so WeasyPrint can render it without
-    any path-resolution worries. None → None (template falls back to initials).
+    """Encode a stored JPEG into a data: URL so WeasyPrint can render it
+    without any path-resolution worries. None → None (template falls back to
+    initials).
 
-    Accepts both the new bare-filename format ("42.jpg") and the legacy
-    "data/photos/42.jpg" so old DB rows keep rendering.
+    Accepts the bare-filename format ("42.jpg") and legacy "data/photos/42.jpg".
     """
     if not photo_path:
         return None
@@ -188,7 +172,6 @@ def _photo_to_data_url(photo_path: str | Path | None) -> str | None:
     elif "/" not in s and "\\" not in s:
         resolved = _PHOTO_STORAGE_DIR / s
     else:
-        # Legacy "data/photos/N.jpg" — relative to backend/
         resolved = Path(__file__).resolve().parent / s
     try:
         data = resolved.read_bytes()
@@ -198,33 +181,85 @@ def _photo_to_data_url(photo_path: str | Path | None) -> str | None:
     return f"data:image/jpeg;base64,{encoded}"
 
 
+def _logo_to_data_url() -> str | None:
+    """Embed the Quatelio logo as a data URL for WeasyPrint. The file lives in
+    backend/static/. Cached read on first call; None if the asset is missing
+    so the template can fall back to a text wordmark."""
+    path = _STATIC_DIR / "quatelio_logo.png"
+    if not path.exists():
+        return None
+    try:
+        data = path.read_bytes()
+    except Exception:
+        return None
+    encoded = base64.b64encode(data).decode("ascii")
+    return f"data:image/png;base64,{encoded}"
+
+
+def _prepare_context(data: dict) -> dict:
+    """Build the one-pager context for the BearingPoint-style 3-column layout.
+
+    Applies heuristic backfill so old snapshots render even without the new
+    fields. The personal contact block is intentionally omitted on the
+    one-pager (Quatelio house style — recruiter pitch, not contact sheet).
+    """
+    data = _backfill_new_fields(dict(data))
+    personal = data.get("personal_information", {}) or {}
+    full_name = personal.get("full_name") or "Candidate Profile"
+
+    relevant_experience = []
+    for item in (data.get("relevant_experience") or [])[:_ONEPAGER_MAX_RELEVANT_EXPERIENCE]:
+        if not isinstance(item, dict):
+            continue
+        relevant_experience.append({
+            "client_label": (item.get("client_label") or "").strip(),
+            "description": _truncate_at_word(
+                (item.get("description") or "").strip(),
+                _ONEPAGER_DESCRIPTION_MAX_CHARS,
+            ),
+        })
+    professional_background = list(data.get("professional_background") or [])[:_ONEPAGER_MAX_BACKGROUND]
+    professional_focus = list(data.get("professional_focus") or [])[:_ONEPAGER_MAX_FOCUS]
+    education_certificates = list(data.get("education_certificates") or [])[:_ONEPAGER_MAX_EDUCATION]
+    industries = list(data.get("industries") or [])[:_ONEPAGER_MAX_INDUSTRIES]
+
+    languages = [
+        {"name": (l.get("name") or "").strip(), "level": (l.get("level") or "").strip()}
+        for l in (data.get("languages") or [])
+        if isinstance(l, dict) and (l.get("name") or "").strip()
+    ]
+
+    return {
+        "full_name": full_name,
+        "initials": _make_initials(full_name),
+        "role_title": (data.get("role_title") or "").strip(),
+        "professional_focus": professional_focus,
+        "relevant_experience": relevant_experience,
+        "professional_background": professional_background,
+        "education_certificates": education_certificates,
+        "industries": industries,
+        "languages": languages,
+        "logo_data_url": _logo_to_data_url(),
+    }
+
+
 def create_pdf_summary(data: dict, photo_path: str | Path | None = None) -> bytes:
-    """Render the candidate profile to PDF bytes using WeasyPrint."""
+    """Render the one-pager candidate profile to PDF bytes using WeasyPrint."""
     template = _env.get_template("cv_profile.html")
     context = _prepare_context(data)
     context["photo_data_url"] = _photo_to_data_url(photo_path)
     html_str = template.render(**context)
-    return HTML(string=html_str, base_url=str(_TEMPLATE_DIR)).write_pdf()
+    return _weasy_html()(string=html_str, base_url=str(_TEMPLATE_DIR)).write_pdf()
 
 
-# ── Full CV (multi-page, internal use) ─────────────────────────────────────
-
-# Section ordering for the full CV's "Core Skills" block. Languages live in
-# their own section above and must not appear here a second time.
-_FULL_CV_CATEGORY_ORDER = (
-    "Programming Languages",
-    "Frameworks & Libraries",
-    "Databases",
-    "Tools & Platforms",
-    "SAP",
-    "Data & Analytics",
-    "Methods & Frameworks",
-    "Communication & Training",
-)
+# ── Full CV (classic portrait, but new section structure) ──────────────
+# Same fields as the one-pager but NO caps — every entry the LLM produced
+# is rendered. This makes the cascade Webseite → Full CV → One-Pager
+# explicit: same data, three densities.
 
 
-# Personal-data row labels for the Full-CV's Personal Data block. Order matters
-# — this is the on-page order. Each entry: (json_key, display_label).
+# Personal-data row labels for the Full CV's Personal Data block. Order
+# matters — on-page order. (json_key, display_label).
 _PERSONAL_ROW_ORDER = (
     ("age_or_dob",     "Date of Birth"),
     ("nationality",    "Nationality"),
@@ -238,6 +273,7 @@ _PERSONAL_ROW_ORDER = (
 
 
 def _prepare_full_cv_context(data: dict) -> dict:
+    data = _backfill_new_fields(dict(data))
     personal = data.get("personal_information", {}) or {}
     full_name = personal.get("full_name") or "Candidate Profile"
 
@@ -249,95 +285,31 @@ def _prepare_full_cv_context(data: dict) -> dict:
         if value:
             personal_rows.append({"label": label, "value": value})
 
-    raw_projects = [p for p in (data.get("projects") or []) if isinstance(p, dict)]
-    # Same chronological sort as the one-pager, but NO Top-5 cap — full CV.
-    sorted_projects = sorted(raw_projects, key=_score_project, reverse=True)
-
-    # Job title = most-recent project's name (= role/title in the LLM schema),
-    # falls back to a neutral placeholder.
-    job_title = ""
-    for p in sorted_projects:
-        if p.get("name"):
-            job_title = p["name"]
-            break
-
-    projects = []
-    for p in sorted_projects:
-        name = (p.get("name") or "").strip()
-        duration = (p.get("duration") or "").strip()
-        industry = (p.get("industry") or "").strip()
-        # Header format: "Job Title – Industry (Duration)"; pieces are dropped
-        # gracefully when missing so we never end up with "  ( )".
-        pieces = [name] if name else []
-        if industry:
-            pieces.append(f"– {industry}")
-        if duration:
-            pieces.append(f"({duration})")
-        header = " ".join(pieces).strip() or "Position"
-        projects.append({
-            "header": header,
-            "description": (p.get("description") or "").strip(),
-        })
-
-    # Spoken languages: prefer the dedicated `languages` field (current schema).
-    # Fall back to skill_matrix Languages-category for legacy stored CVs.
-    languages: list[str] = []
-    for l in data.get("languages") or []:
-        if not isinstance(l, dict):
-            continue
-        name = (l.get("name") or "").strip()
-        if not name:
-            continue
-        level = (l.get("level") or "").strip()
-        languages.append(f"{name} ({level})" if level else name)
-
-    skill_lines: list[dict] = []
-    grouped: dict[str, list[str]] = {}
-    for group in data.get("skill_matrix", []) or []:
-        if not isinstance(group, dict):
-            continue
-        cat = group.get("category") or ""
-        names = []
-        for s in group.get("skills", []) or []:
-            if not isinstance(s, dict):
-                continue
-            n = (s.get("skill") or "").strip()
-            if n:
-                names.append(n)
-        if not names:
-            continue
-        if cat == "Languages":
-            # Legacy fallback only — current pipeline routes languages to the
-            # dedicated field. Skip if we already populated from there.
-            if not languages:
-                languages.extend(names)
-        else:
-            grouped[cat] = names
-
-    for cat in _FULL_CV_CATEGORY_ORDER:
-        names = grouped.get(cat)
-        if names:
-            skill_lines.append({"category": cat, "skills": ", ".join(names)})
+    languages = [
+        {"name": (l.get("name") or "").strip(), "level": (l.get("level") or "").strip()}
+        for l in (data.get("languages") or [])
+        if isinstance(l, dict) and (l.get("name") or "").strip()
+    ]
 
     return {
         "full_name": full_name,
-        "job_title": job_title,
+        "role_title": (data.get("role_title") or "").strip(),
         "personal_rows": personal_rows,
-        "summary": (data.get("small_summary") or "").strip(),
-        # Fields the schema doesn't carry yet — kept as empty lists so the
-        # template's "if" guards collapse the sections cleanly.
-        "education": [],
-        "certifications": [],
-        "hobbies": [],
+        # New sections — full lists, no caps.
+        "professional_focus": list(data.get("professional_focus") or []),
+        "education_certificates": list(data.get("education_certificates") or []),
+        "industries": list(data.get("industries") or []),
         "languages": languages,
-        "skill_lines": skill_lines,
-        "projects": projects,
+        "professional_background": list(data.get("professional_background") or []),
+        "relevant_experience": list(data.get("relevant_experience") or []),
     }
 
 
-def create_full_cv_pdf(data: dict) -> bytes:
-    """Render the multi-page Quatelio-format CV to PDF bytes."""
+def create_full_cv_pdf(data: dict, photo_path: str | Path | None = None) -> bytes:
+    """Render the classic-portrait Quatelio Full CV (single column, all data).
+    `photo_path` is accepted for API compatibility but the portrait template
+    is intentionally text-only — photos live on the one-pager."""
     template = _env.get_template("cv_full.html")
     context = _prepare_full_cv_context(data)
     html_str = template.render(**context)
-    return HTML(string=html_str, base_url=str(_TEMPLATE_DIR)).write_pdf()
+    return _weasy_html()(string=html_str, base_url=str(_TEMPLATE_DIR)).write_pdf()

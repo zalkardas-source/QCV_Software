@@ -470,6 +470,78 @@ def structure_cv_data(raw_markdown: str) -> dict:
          If the CV gives no level, set `level` to null — do NOT guess.
        Languages must NOT also appear in skill_matrix.
 
+    8. ROLE_TITLE — One short headline role for the PDF header, in English.
+       Take the most recent / highest job title the candidate currently holds
+       (or held most recently). Examples: "Senior SAP Consultant",
+       "Associate Director", "Project Manager", "SAP MM/SD Lead". Keep it
+       under 5 words. Null only if no role is derivable.
+
+    9. PROFESSIONAL_FOCUS — 4-6 short bullet statements summarizing the
+       candidate's competencies. Each bullet is ONE sentence, factual, no
+       marketing fluff. Mirror the BearingPoint pattern — concrete capabilities
+       drawn from project evidence:
+         - "Expert knowledge of SAP modules: EWM, MM, WM, SD, RETAIL"
+         - "Integrations SAP with third party supplier systems"
+         - "Proficiency in SAP ABAP programming language"
+         - "Ability to propose new, optimized SAP solutions where standard features are not enough"
+         - "Over 15 years of professional experience across various technologies and sectors"
+       Pull from the strongest evidence in skill_matrix + projects + summary.
+       Avoid character soft skills (Teamfähigkeit, Belastbarkeit). Avoid
+       restating individual project content — those go into relevant_experience.
+
+   10. RELEVANT_EXPERIENCE — One bullet per project the candidate has worked
+       on (max 25), most recent first. The same list is the backbone of the
+       Full CV (all of them) and the one-pager (top 6 only). Each entry:
+       - `client_label`: bold lead for the bullet.
+         * If the CV names the client explicitly (e.g. "BMW Group", "BioNTech",
+           "Animex", "Lek S.A.") and there is no obvious NDA marker → use the
+           exact name.
+         * Otherwise generate a short descriptive label from industry + size
+           hint + region. Patterns that work well:
+           - "Leading <country> <industry> company"   ("Leading Polish food producer")
+           - "<rank> largest <industry> <entity>"     ("10th largest pharmaceutical company in the world")
+           - "<country>'s largest <sector> company"   ("Poland's largest energy sector company")
+           - "Global <industry> player"               ("Global car dealer")
+         * Keep client_label under 10 words.
+       - `description`: 1-2 short sentences. Name the SAP modules / tech used
+         and the candidate's role.
+         Example: "SAP S/4HANA implementation, PP/QM module. Pre-implementation
+         analysis, system configuration, user training."
+       Order: most recent first. Include every project from the CV — the
+       Full CV needs the full chronology. Skip only truly trivial entries
+       (e.g. a 1-month internship with no description).
+
+   11. PROFESSIONAL_BACKGROUND — Chronological work history (employment
+       stations, NOT individual projects), most recent first, max 15 entries.
+       Each entry:
+       - `duration`: date range exactly as the CV writes it ("03/2018 – present",
+         "04/2014 – 03/2018", "2020-2022"). Keep separators consistent.
+       - `company`: employer name verbatim.
+       - `role`: job title held during that period.
+       - `note`: optional short trailing detail, ONLY if the CV gives one
+         concrete sentence worth showing (e.g. "Maintenance and developing
+         SAP SD/WM/HR modules."). Leave null otherwise.
+       This list is the candidate's job chronology — the same engagements may
+       also appear (curated) in relevant_experience.
+
+   12. EDUCATION_CERTIFICATES — Combined bullet list of formal education and
+       certifications. Highest degree first, then certifications. Format each
+       entry as one line, in English where natural:
+         - "Wrocław University of Technology, Software Engineering"
+         - "Warsaw School of Economics - IT Management Systems"
+         - "SAP Certified Application Associate - SAP Extended Warehouse Management 9.4"
+         - "Prince 2 Practitioner"
+         - "Introduction to SAP Fiori UX (OpenSAP)"
+       Keep entries factual and short — no descriptions, no years unless they
+       are part of the certificate name.
+
+   13. INDUSTRIES — Deduplicated list of industries the candidate has worked
+       across, derived from projects[].industry. Max 5. One or two words each,
+       English. Examples: "Transport & Logistics", "Manufacturing", "Retail",
+       "Pharma", "Banking", "FMCG", "Utilities", "Public Sector". Use the same
+       canonical spellings as the projects[].industry field. Sort by frequency
+       (most-worked-in industry first), then alphabetically.
+
     6. FORMAT — No preamble, no markdown fences, raw JSON only.
     """
     

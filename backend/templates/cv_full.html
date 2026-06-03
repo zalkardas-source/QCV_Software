@@ -7,16 +7,10 @@
     /* ── Page setup ───────────────────────────────────────────── */
     @page {
         size: A4;
-        margin: 2.5cm 2.5cm 2.8cm 2.5cm;
+        margin: 2.4cm 2.4cm 2.6cm 2.4cm;
 
-        /* Top blue rule on every page */
-        @top-left { content: ""; }
-        @top-center { content: ""; }
-        @top-right { content: ""; }
-
-        /* Bottom: footer text + page number */
         @bottom-center {
-            content: "Quatelio GmbH  •  Kaiserstr. 40  •  D-74072 Heilbronn  •  E-Mail: sourcing@quatelio.com  •  Internet: quatelio.com";
+            content: "Quatelio CVision";
             font-family: "DejaVu Sans", "Helvetica", "Arial", sans-serif;
             font-size: 8pt;
             color: #6b7280;
@@ -33,9 +27,7 @@
         }
     }
 
-    /* Decorative blue rules drawn as fixed-position elements relative
-       to the page margin box. We use a body::before for the top rule and
-       a footer wrapper inside @bottom-left for the bottom rule. */
+    /* Decorative blue rules at top and bottom of every page. */
     body::before {
         content: "";
         position: fixed;
@@ -100,6 +92,13 @@
         margin-bottom: 3mm;
     }
     .section-title { break-after: avoid; }
+    .subhead {
+        font-size: 10.5pt;
+        font-weight: bold;
+        color: #1a1a1a;
+        margin: 4mm 0 1.5mm 0;
+    }
+    .subhead:first-child { margin-top: 0; }
 
     /* ── Personal data table ─────────────────────────────────── */
     .personal-table {
@@ -122,7 +121,7 @@
         word-break: break-word;
     }
 
-    /* ── Body styles ──────────────────────────────────────────── */
+    /* ── Body ─────────────────────────────────────────────────── */
     .summary {
         text-align: justify;
         line-height: 1.55;
@@ -132,34 +131,49 @@
         padding-left: 5mm;
     }
     ul.bullets li {
-        margin-bottom: 1.5mm;
-        line-height: 1.5;
-    }
-    .skill-line .cat {
-        font-weight: bold;
-        color: #2E5B9F;
+        margin-bottom: 1.2mm;
+        line-height: 1.45;
     }
 
-    /* ── Experience entries ───────────────────────────────────── */
-    .experience-list {
+    /* ── Background entries (chronological) ───────────────────── */
+    .bg-item {
+        margin-bottom: 3mm;
+        break-inside: avoid;
+        line-height: 1.4;
+    }
+    .bg-item .when {
+        font-weight: bold;
+        color: #1a1a1a;
+    }
+    .bg-item .who {
+        color: #2b2b2b;
+    }
+    .bg-item .note {
+        color: #4b5563;
+        font-size: 10pt;
+        margin-top: 0.5mm;
+    }
+
+    /* ── Relevant experience (project highlights) ─────────────── */
+    .exp-list {
         list-style: none;
         margin: 0;
         padding: 0;
     }
-    .experience-item {
-        margin-bottom: 5mm;
+    .exp-item {
+        margin-bottom: 3.5mm;
         break-inside: avoid;
+        line-height: 1.45;
     }
-    .experience-header {
+    .exp-item .client {
         font-weight: bold;
         color: #1a1a1a;
         font-size: 10.5pt;
-        margin-bottom: 1mm;
     }
-    .experience-description {
-        text-align: justify;
+    .exp-item .desc {
         color: #2b2b2b;
-        line-height: 1.5;
+        text-align: justify;
+        margin-top: 0.5mm;
     }
 </style>
 </head>
@@ -167,8 +181,8 @@
 
 <div class="title-block">
     <div class="title-name">{{ full_name }}</div>
-    {% if job_title %}
-    <div class="title-role">{{ job_title }}</div>
+    {% if role_title %}
+        <div class="title-role">{{ role_title }}</div>
     {% endif %}
 </div>
 
@@ -186,79 +200,77 @@
 </div>
 {% endif %}
 
-{% if summary %}
+{% if professional_focus %}
 <div class="section">
-    <div class="section-title">Professional Summary</div>
-    <div class="summary">{{ summary }}</div>
-</div>
-{% endif %}
-
-{% if education %}
-<div class="section">
-    <div class="section-title">Education</div>
+    <div class="section-title">Professional Focus</div>
     <ul class="bullets">
-        {% for item in education %}
-        <li>{{ item }}</li>
+        {% for bullet in professional_focus %}
+        <li>{{ bullet }}</li>
         {% endfor %}
     </ul>
 </div>
 {% endif %}
 
-{% if languages %}
+{% if education_certificates or industries or languages %}
 <div class="section">
-    <div class="section-title">Languages</div>
+    <div class="section-title">Personal Background</div>
+
+    {% if education_certificates %}
+    <div class="subhead">Education / Certificates</div>
+    <ul class="bullets">
+        {% for entry in education_certificates %}
+        <li>{{ entry }}</li>
+        {% endfor %}
+    </ul>
+    {% endif %}
+
+    {% if industries %}
+    <div class="subhead">Industries</div>
+    <ul class="bullets">
+        {% for ind in industries %}
+        <li>{{ ind }}</li>
+        {% endfor %}
+    </ul>
+    {% endif %}
+
+    {% if languages %}
+    <div class="subhead">Languages</div>
     <ul class="bullets">
         {% for lang in languages %}
-        <li>{{ lang }}</li>
-        {% endfor %}
-    </ul>
-</div>
-{% endif %}
-
-{% if certifications %}
-<div class="section">
-    <div class="section-title">Certifications</div>
-    <ul class="bullets">
-        {% for c in certifications %}
-        <li>{{ c }}</li>
-        {% endfor %}
-    </ul>
-</div>
-{% endif %}
-
-{% if skill_lines %}
-<div class="section">
-    <div class="section-title">Core Skills</div>
-    <ul class="bullets">
-        {% for line in skill_lines %}
-        <li class="skill-line"><span class="cat">{{ line.category }}:</span> {{ line.skills }}</li>
-        {% endfor %}
-    </ul>
-</div>
-{% endif %}
-
-{% if projects %}
-<div class="section">
-    <div class="section-title">Professional Experience</div>
-    <ul class="experience-list">
-        {% for proj in projects %}
-        <li class="experience-item">
-            <div class="experience-header">{{ proj.header }}</div>
-            {% if proj.description %}
-            <div class="experience-description">{{ proj.description }}</div>
-            {% endif %}
+        <li>
+            {{ lang.name }}{% if lang.level %} ({{ lang.level }}){% endif %}
         </li>
         {% endfor %}
     </ul>
+    {% endif %}
 </div>
 {% endif %}
 
-{% if hobbies %}
+{% if professional_background %}
 <div class="section">
-    <div class="section-title">Hobbies</div>
-    <ul class="bullets">
-        {% for h in hobbies %}
-        <li>{{ h }}</li>
+    <div class="section-title">Professional Background</div>
+    {% for entry in professional_background %}
+        <div class="bg-item">
+            <span class="when">{{ entry.duration }}</span>
+            {% if entry.company %} — <span class="who">{{ entry.company }}</span>{% endif %}
+            {% if entry.role %} — <span class="who">{{ entry.role }}</span>{% endif %}
+            {% if entry.note %}<div class="note">{{ entry.note }}</div>{% endif %}
+        </div>
+    {% endfor %}
+</div>
+{% endif %}
+
+{% if relevant_experience %}
+<div class="section">
+    <div class="section-title">Relevant Experience</div>
+    <ul class="exp-list">
+        {% for item in relevant_experience %}
+        <li class="exp-item">
+            <div class="client">{{ item.client_label }}</div>
+            {% if item.description %}
+            <div class="desc">{{ item.description }}</div>
+            {% endif %}
+        </li>
         {% endfor %}
     </ul>
 </div>

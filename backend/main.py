@@ -197,7 +197,7 @@ async def parse_cv(
         )
 
         structured_data = await anyio.to_thread.run_sync(
-            structure_cv_data, raw_markdown
+            structure_cv_data, raw_markdown, file.filename
         )
 
         return {
@@ -262,7 +262,8 @@ def _persist_cv(db: Session, data: dict, filename: str, photo_bytes: bytes | Non
     inserted. Caller is responsible for commit/rollback.
     """
     personal = data.get("personal_information", {})
-    full_name = personal.get("full_name", "Unknown Name")
+    # `or` instead of .get-default: the key may exist with value None/""
+    full_name = personal.get("full_name") or "Unknown Name"
     email = (personal.get("email") or "").strip()
     location = personal.get("location", "")
     summary = data.get("small_summary", "")
@@ -409,7 +410,7 @@ async def upload_cv(
             extract_text_and_photo, content, file.filename
         )
         structured_data = await anyio.to_thread.run_sync(
-            structure_cv_data, raw_markdown
+            structure_cv_data, raw_markdown, file.filename
         )
 
         profile = _persist_cv(db, structured_data, file.filename, photo_bytes)

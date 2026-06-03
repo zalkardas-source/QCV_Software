@@ -377,6 +377,75 @@ def test_upload_cv_runs_pipeline_and_persists(client, auth_token):
         db.close()
 
 
+def test_structure_cv_data_passes_filename_to_llm():
+    """The uploaded file's name is prepended to the LLM user message so the
+    FULL_NAME FALLBACK rule can derive the candidate's name from it when the
+    document text contains none (e.g. '!A_Frolov_CV_Feb2026.docx')."""
+    with patch("backend.services.OpenAI") as mock_openai:
+        mock_client = MagicMock()
+        mock_openai.return_value = mock_client
+        mock_client.chat.completions.create.return_value = _make_openai_response(
+            json.dumps(_VALID_CV)
+        )
+
+        services.structure_cv_data("raw markdown", "!A_Frolov_CV_Feb2026.docx")
+
+        call = mock_client.chat.completions.create.call_args
+        user_msg = call.kwargs["messages"][1]["content"]
+    assert user_msg.startswith("Source filename: !A_Frolov_CV_Feb2026.docx")
+    assert "CV Text:\nraw markdown" in user_msg
+
+
+def test_structure_cv_data_without_filename_omits_hint():
+    """No filename → no 'Source filename' line (URL imports, legacy callers)."""
+    with patch("backend.services.OpenAI") as mock_openai:
+        mock_client = MagicMock()
+        mock_openai.return_value = mock_client
+        mock_client.chat.completions.create.return_value = _make_openai_response(
+            json.dumps(_VALID_CV)
+        )
+
+        services.structure_cv_data("raw markdown")
+
+        call = mock_client.chat.completions.create.call_args
+        user_msg = call.kwargs["messages"][1]["content"]
+    assert "Source filename" not in user_msg
+    assert user_msg.startswith("CV Text:")
+
+
+def test_upload_cv_passes_filename_to_structurer(client, auth_token):
+    """The upload endpoint forwards the original filename into the parsing
+    pipeline — it carries the candidate's name when the document doesn't."""
+    with patch("backend.main.extract_text_and_photo", return_value=("md", None)), \
+         patch("backend.main.structure_cv_data", return_value=_VALID_CV) as mock_structure:
+        r = client.post(
+            "/api/upload-cv",
+            files={"file": ("!A_Frolov_CV_Feb2026.docx", b"x",
+                            "application/vnd.openxmlformats-officedocument.wordprocessingml.document")},
+            headers={"Authorization": f"Bearer {auth_token}"},
+        )
+    assert r.status_code == 200
+    assert mock_structure.call_args.args == ("md", "!A_Frolov_CV_Feb2026.docx")
+
+
+def test_persist_cv_falls_back_to_unknown_when_name_is_none(client):
+    """personal_information.full_name = None (key present, value empty) must
+    not crash or store None — the profile gets the 'Unknown Name' marker."""
+    from backend.main import _persist_cv
+
+    db = _SessionLocal()
+    try:
+        profile = _persist_cv(
+            db,
+            {"personal_information": {"full_name": None}, "skill_matrix": [], "projects": []},
+            "nameless.pdf",
+        )
+        db.commit()
+        assert profile.name == "Unknown Name"
+    finally:
+        db.close()
+
+
 def test_upload_cv_requires_auth(client):
     response = client.post(
         "/api/upload-cv",

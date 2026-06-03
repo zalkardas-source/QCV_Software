@@ -243,8 +243,13 @@ def extract_text_and_photo(file_content: bytes, filename: str) -> tuple[str, byt
                 pass
 
 
-def structure_cv_data(raw_markdown: str) -> dict:
-    """Structures CV Markdown into strict JSON using Minimax-m2.7 with optimized prompt."""
+def structure_cv_data(raw_markdown: str, source_filename: str | None = None) -> dict:
+    """Structures CV Markdown into strict JSON using Minimax-m2.7 with optimized prompt.
+
+    `source_filename` (the uploaded file's name) is passed to the LLM as
+    fallback context: recruiters often encode the candidate's name only in
+    the filename ("!A_Frolov_CV_Feb2026.docx") while the document text has
+    none — without it those profiles end up as "Unknown Name"."""
     client = OpenAI(base_url="https://openrouter.ai/api/v1", api_key=settings.openrouter_api_key)
     schema_json = CVData.model_json_schema()
     
@@ -268,6 +273,20 @@ def structure_cv_data(raw_markdown: str) -> dict:
        - website          : personal website / portfolio URL
        Leave a field as null ONLY when the CV truly does not contain it. Do not
        guess or fabricate values.
+
+       FULL_NAME FALLBACK FROM FILENAME — the CV text is the AUTHORITATIVE
+       source for full_name; a name found in the text always wins. But if the
+       text truly contains no candidate name, derive it from the source
+       filename provided above the CV text (recruiters often encode it there).
+       Examples:
+         - "!A_Frolov_CV_Feb2026.docx"                            → "A. Frolov"
+         - "Richard-Griffith-SAP_BRIM_Solution_Architect_DE.docx" → "Richard Griffith"
+         - "lebenslauf_mueller_thomas.pdf"                        → "Thomas Mueller"
+       When deriving: ignore the file extension, dates, version markers
+       ("Kopie", "final", "v2"), and non-name words (CV, Lebenslauf, Resume,
+       Profile, role/technology terms like SAP, Consultant, Architect). Use
+       natural capitalization. Output 'Unknown Name' ONLY when neither the
+       text nor the filename yields a plausible person name.
 
     1. SKILLS — Extract the candidate's SIGNIFICANT skills. Aim for QUALITY
        over EXHAUSTIVENESS: a candidate who lists 50 tools in a buzzword
@@ -547,9 +566,15 @@ def structure_cv_data(raw_markdown: str) -> dict:
     
     logger.debug("Raw CV markdown (first 500 chars):\n%s", raw_markdown[:500])
 
+    user_content = f"CV Text:\n{raw_markdown}"
+    if source_filename:
+        # Prepend the filename so the FULL_NAME FALLBACK rule has something
+        # to work with when the document text carries no candidate name.
+        user_content = f"Source filename: {source_filename}\n\n{user_content}"
+
     messages = [
         {"role": "system", "content": system_prompt},
-        {"role": "user", "content": f"CV Text:\n{raw_markdown}"}
+        {"role": "user", "content": user_content}
     ]
     
     import time

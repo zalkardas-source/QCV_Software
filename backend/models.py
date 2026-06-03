@@ -12,6 +12,11 @@ class User(Base):
 
 class CVProfile(Base):
     __tablename__ = "cv_profiles"
+    # AUTOINCREMENT: profile IDs leak outside the DB (photo filenames like
+    # "42.jpg", /api/cvs/{id} URLs in browser tabs and exports). Without it,
+    # SQLite reuses IDs after a data reset and a *different* candidate would
+    # inherit an old candidate's references. Same reasoning on CVVersion.
+    __table_args__ = {"sqlite_autoincrement": True}
 
     id = Column(Integer, primary_key=True, index=True)
     filename = Column(String)
@@ -73,6 +78,9 @@ class CVVersion(Base):
     historical renderings keep the photo that was current at upload time.
     """
     __tablename__ = "cv_versions"
+    # See CVProfile: version IDs appear in /api/cvs/{id}/versions/{vid}/photo
+    # URLs and archived photo filenames — never reuse them.
+    __table_args__ = {"sqlite_autoincrement": True}
 
     id = Column(Integer, primary_key=True, index=True)
     cv_profile_id = Column(Integer, ForeignKey("cv_profiles.id"), index=True)

@@ -121,7 +121,58 @@ def _ensure_photo_path_column():
         conn.execute(text("ALTER TABLE cv_profiles ADD COLUMN photo_path VARCHAR"))
 
 
+def _ensure_sqlite_autoincrement(bind=None):
+    """Idempotent SQLite migration: rebuild tables whose IDs are referenced
+    outside the DB so their primary key carries AUTOINCREMENT.
+
+    Plain SQLite INTEGER PRIMARY KEY computes the next id as max(id)+1, so
+    after rows are deleted (e.g. a test-data reset) old IDs get reassigned —
+    and a *different* candidate appears under an old candidate's photo file
+    and URL. AUTOINCREMENT keeps a persistent high-water mark in
+    sqlite_sequence and never hands out an ID twice.
+
+    SQLite cannot add AUTOINCREMENT via ALTER TABLE, so we rebuild: create
+    the new table (from the model, which now carries sqlite_autoincrement),
+    copy all rows, drop the old table, rename. Copying explicit IDs seeds
+    sqlite_sequence with the current max automatically. Safe to run
+    repeatedly; one transaction per startup.
+    """
+    from sqlalchemy import inspect, text
+    from sqlalchemy.schema import CreateTable
+
+    target = bind or engine
+    if target.dialect.name != "sqlite":
+        return
+    existing = set(inspect(target).get_table_names())
+    with target.begin() as conn:
+        for model in (CVProfile, CVVersion):
+            table = model.__table__
+            if table.name not in existing:
+                continue  # create_all already built it with AUTOINCREMENT
+            ddl = conn.execute(
+                text("SELECT sql FROM sqlite_master WHERE type='table' AND name=:n"),
+                {"n": table.name},
+            ).scalar()
+            if ddl and "AUTOINCREMENT" in ddl.upper():
+                continue  # already migrated
+            tmp = f"{table.name}_autoinc_tmp"
+            create_sql = str(CreateTable(table).compile(target)).replace(
+                f"CREATE TABLE {table.name}", f"CREATE TABLE {tmp}", 1
+            )
+            columns = ", ".join(c.name for c in table.columns)
+            conn.execute(text(create_sql))
+            conn.execute(
+                text(f"INSERT INTO {tmp} ({columns}) SELECT {columns} FROM {table.name}")
+            )
+            conn.execute(text(f"DROP TABLE {table.name}"))
+            conn.execute(text(f"ALTER TABLE {tmp} RENAME TO {table.name}"))
+            for index in table.indexes:
+                index.create(bind=conn, checkfirst=True)
+            logger.info("[MIGRATION] %s rebuilt with AUTOINCREMENT", table.name)
+
+
 _ensure_photo_path_column()
+_ensure_sqlite_autoincrement()
 
 
 app = FastAPI(title="QCV Professional Parser API")
@@ -617,10 +668,12 @@ def get_cv_version_photo(cv_id: int, version_id: int, db: Session = Depends(get_
     full_path = _resolve_photo_path(v.photo_path)
     if not full_path or not full_path.exists():
         raise HTTPException(status_code=404, detail="Photo file missing")
+    # no-store: photo content behind this URL can change (re-upload, or ID reuse
+    # after a DB reset), so the browser must never serve a cached copy.
     return Response(
         content=full_path.read_bytes(),
         media_type="image/jpeg",
-        headers={"Cache-Control": "public, max-age=3600"},
+        headers={"Cache-Control": "no-store"},
     )
 
 
@@ -633,10 +686,11 @@ def get_cv_photo(cv_id: int, db: Session = Depends(get_db), user: User = Depends
     full_path = _resolve_photo_path(profile.photo_path)
     if not full_path or not full_path.exists():
         raise HTTPException(status_code=404, detail="Photo file missing")
+    # no-store: same reasoning as the version-photo endpoint above.
     return Response(
         content=full_path.read_bytes(),
         media_type="image/jpeg",
-        headers={"Cache-Control": "public, max-age=3600"},
+        headers={"Cache-Control": "no-store"},
     )
 
 @app.get("/api/cvs/{cv_id}")

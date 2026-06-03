@@ -341,6 +341,33 @@ def test_upload_cv_persists_photo_bytes_when_extracted(client, auth_token):
         db.close()
 
 
+def test_photo_endpoint_sends_no_store_cache_header(client, auth_token):
+    """The photo behind /api/cvs/{id}/photo can change (re-upload, or ID reuse
+    after a DB reset) while the URL stays the same. A cacheable response made
+    the browser show the previous candidate's photo — regression guard for
+    the stale-photo bug found 2026-06-03."""
+    fake_jpeg = b"\xff\xd8\xff\xe0\x00\x10JFIF" + b"\x00" * 100
+    cv = dict(_VALID_CV)
+    cv["personal_information"] = {"full_name": "Cache Person", "email": "cache@example.com"}
+    with patch("backend.main.extract_text_and_photo", return_value=("md", fake_jpeg)), \
+         patch("backend.main.structure_cv_data", return_value=cv):
+        r = client.post(
+            "/api/upload-cv",
+            files={"file": ("c.pdf", b"x", "application/pdf")},
+            headers={"Authorization": f"Bearer {auth_token}"},
+        )
+    assert r.status_code == 200
+    cv_id = r.json()["id"]
+
+    r = client.get(
+        f"/api/cvs/{cv_id}/photo",
+        headers={"Authorization": f"Bearer {auth_token}"},
+    )
+    assert r.status_code == 200
+    assert r.headers["cache-control"] == "no-store"
+    assert r.content == fake_jpeg
+
+
 def test_upload_cv_runs_pipeline_and_persists(client, auth_token):
     """End-to-end: file upload → mocked parse → mocked review → row in DB."""
     with patch("backend.main.extract_text_and_photo", return_value=("markdown body", None)), \

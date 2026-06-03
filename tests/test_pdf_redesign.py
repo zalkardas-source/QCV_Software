@@ -18,6 +18,16 @@ from backend.export_pdf import _backfill_new_fields, _prepare_context, _prepare_
 TEMPLATE_DIR = Path(__file__).resolve().parents[1] / "backend" / "templates"
 
 
+def _require_real_weasyprint():
+    """Skip unless WeasyPrint is genuinely installed. importorskip alone is
+    not enough: test_upload_cv.py stubs `weasyprint` with a MagicMock so the
+    backend imports in environments without Cairo/Pango (e.g. local Windows).
+    A real install exposes a string __version__; the stub does not."""
+    wp = pytest.importorskip("weasyprint")
+    if not isinstance(getattr(wp, "__version__", None), str):
+        pytest.skip("WeasyPrint is stubbed in this environment (runtime dep of the container)")
+
+
 def test_cvdata_accepts_minimal_payload():
     """A minimal payload (legacy shape) still validates — all new fields are
     Optional with safe defaults."""
@@ -216,6 +226,103 @@ def test_prepare_context_caps_to_one_pager_limits():
     assert len(ctx["relevant_experience"]) <= 7
     assert len(ctx["professional_background"]) <= 5
     assert len(ctx["professional_focus"]) <= 6
+
+
+def test_prepare_context_caps_languages_and_truncates_education():
+    """Left-column fields are bounded too: languages capped, long education
+    entries truncated at a word boundary. Uncapped left-column content was
+    a driver of the page-overflow incident (2026-06-03)."""
+    data = {
+        "personal_information": {"full_name": "Test"},
+        "languages": [{"name": f"Lang {i}", "level": "good"} for i in range(12)],
+        "education_certificates": [
+            "Trainings zu SAP Finanzwesen (ECC und S/4HANA) mit sehr vielen "
+            "Kurscodes, die diese Zeile weit über die Spaltenbreite hinaus verlängern: "
+            "TFIN20, AC105, AC110, AC040, AC200, AC305, AC805, FSC020"
+        ],
+    }
+    ctx = _prepare_context(data)
+    assert len(ctx["languages"]) <= 6
+    assert len(ctx["education_certificates"][0]) <= 111  # 110 + ellipsis
+    assert ctx["education_certificates"][0].endswith("…")
+
+
+def _worst_case_onepager_data():
+    """A CV that maxes out every one-pager cap simultaneously — long entries
+    in every section. If this fits one page, real CVs do too."""
+    return {
+        "personal_information": {"full_name": "Maximilian Mustermann-Langenname"},
+        "role_title": "SAP BRIM Solution Architect & Programme Lead",
+        "professional_focus": [
+            f"Expert knowledge of SAP module family {i} including all related "
+            "sub-components, integration scenarios and migration paths" for i in range(10)
+        ],
+        "relevant_experience": [
+            {
+                "client_label": f"Large international client organisation {i}",
+                "description": "Responsible for solution architecture, functional design, "
+                "stream leadership, integration testing, cutover planning and "
+                "hypercare support across multiple parallel rollout waves with "
+                "distributed teams." ,
+            }
+            for i in range(12)
+        ],
+        "professional_background": [
+            {"duration": f"Jan 20{10+i} – Dec 20{11+i}", "company": f"Beratungshaus {i} GmbH & Co. KG",
+             "role": "Principal SAP Finance Consultant – Stream Lead PSCD"}
+            for i in range(10)
+        ],
+        "education_certificates": [
+            "Trainings zu SAP Finanzwesen (ECC und S/4HANA) – TFIN20, AC105, AC110, "
+            "AC040, AC200, AC305, AC805, FSC020 sowie weitere Aufbaukurse" for _ in range(8)
+        ],
+        "industries": ["Public Sector", "Retail", "Utilities", "Logistics", "Insurance",
+                       "Automotive", "Pharma"],
+        "languages": [{"name": f"Sprache {i}", "level": "fluent"} for i in range(10)],
+    }
+
+
+def test_trim_ladder_only_ever_tightens():
+    """Every rung of the trim ladder must be <= the previous one on every
+    knob — a rung that re-grows content would make the fit loop oscillate."""
+    from dataclasses import fields
+    from backend.export_pdf import _ONEPAGER_TRIM_LADDER
+
+    for prev, nxt in zip(_ONEPAGER_TRIM_LADDER, _ONEPAGER_TRIM_LADDER[1:]):
+        for f in fields(prev):
+            assert getattr(nxt, f.name) <= getattr(prev, f.name), f.name
+
+
+def test_one_pager_renders_exactly_one_page_worst_case():
+    """Regression guard for the 2026-06-03 incident: a one-pager spilled onto
+    pages 2-3 (WeasyPrint's flex-basis:auto stretch overshot the page, and
+    over-long content fragmented onto extra pages). The fit loop must always
+    deliver exactly one page — even for a CV maxing out every section.
+    Needs WeasyPrint (runtime dep of the backend container) — skipped locally."""
+    _require_real_weasyprint()
+    from backend.export_pdf import _render_onepager_fitted
+
+    document, rung = _render_onepager_fitted(_worst_case_onepager_data())
+    assert len(document.pages) == 1
+
+
+def test_one_pager_typical_cv_fits_without_trimming():
+    """A typical CV must fit on rung 0 — trimming is the exception, not the
+    rule. Guards against the ladder quietly becoming the default path."""
+    _require_real_weasyprint()
+    from backend.export_pdf import _render_onepager_fitted
+
+    data = _worst_case_onepager_data()
+    # Typical volume: ~Griffith-sized (the CV from the incident).
+    data["professional_focus"] = data["professional_focus"][:6]
+    data["relevant_experience"] = data["relevant_experience"][:7]
+    data["professional_background"] = data["professional_background"][:5]
+    data["education_certificates"] = data["education_certificates"][:5]
+    data["languages"] = data["languages"][:2]
+
+    document, rung = _render_onepager_fitted(data, photo_path=None)
+    assert len(document.pages) == 1
+    assert rung == 0
 
 
 def test_prepare_full_cv_context_does_not_cap_new_fields():

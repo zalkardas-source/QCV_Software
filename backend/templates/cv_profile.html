@@ -103,22 +103,39 @@
     /* Body fills the remaining page height (after header). Each column is a
        flex container; the last box in every column stretches to fill the
        column — that's what makes the BearingPoint look: borders run all the
-       way to the bottom of the page, no matter how much content there is. */
+       way to the bottom of the page, no matter how much content there is.
+
+       ONE-PAGE GUARANTEE (incident 2026-06-03, Griffith CV spilled to 3 pages):
+       all heights here are EXPLICIT, because WeasyPrint 68.1 has two sizing
+       bugs that data-dependently inflate the layout past the page edge:
+       1. flex-grow with flex-basis:auto resolves the basis from the box's
+          content height and then double-counts padding+border on top of it
+          (box-sizing:border-box is ignored on that path). The stretched
+          last box ended 11-16mm below the page edge. flex-basis:0 sidesteps
+          this: the grown size comes purely from free-space distribution and
+          lands exactly on the column bottom.
+       2. A flex-grown grid container fragments onto extra pages even when
+          its content fits. The explicit 161mm height (= 193mm page content
+          - 32mm header) keeps the grid out of pagination entirely.
+       overflow:hidden on .col is the final backstop: content that's still
+       too long is clipped at the column edge — never a second page. */
     .body {
-        flex: 1 1 auto;
+        height: 161mm;
+        flex: 0 0 auto;
         display: grid;
         grid-template-columns: 1fr 1.2fr 1.4fr;
         gap: 4mm;
-        min-height: 0;
     }
     .col {
         display: flex;
         flex-direction: column;
         gap: 3mm;
         min-height: 0;
+        overflow: hidden;
     }
     .col > .box:last-child {
-        flex: 1 1 auto;
+        flex: 1 1 0;
+        min-height: 0;
     }
     /* Left column starts LOWER so its top edge sits BELOW the photo that
        overhangs from the header. Math: header 32mm + box-title overhang

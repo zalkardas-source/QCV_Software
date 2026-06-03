@@ -347,3 +347,57 @@ def test_prepare_full_cv_context_does_not_cap_new_fields():
     assert len(ctx["industries"]) == 8
     # personal_rows still derived from personal_information
     assert any(r["label"] == "E-Mail" for r in ctx["personal_rows"])
+
+
+def test_full_cv_renders_all_projects_when_curated_list_is_shorter():
+    """Consultant case (Filip, 2026-06-03): 39 projects in the CV, but the
+    LLM-curated relevant_experience is capped at 25 — the Full CV must show
+    the COMPLETE chronology, derived from projects, including durations."""
+    data = {
+        "personal_information": {"full_name": "Test"},
+        "relevant_experience": [
+            {"client_label": f"Client {i}", "description": "curated"} for i in range(25)
+        ],
+        "projects": [
+            {"name": f"Project {i}", "duration": f"0{i % 9 + 1}/2015 - 0{i % 9 + 1}/2016",
+             "description": f"desc {i}"}
+            for i in range(39)
+        ],
+    }
+    ctx = _prepare_full_cv_context(data)
+    assert len(ctx["relevant_experience"]) == 39
+    assert all(item["duration"] for item in ctx["relevant_experience"])
+    assert all(item["client_label"].startswith("Project") for item in ctx["relevant_experience"])
+
+
+def test_full_cv_keeps_curated_list_when_not_shorter():
+    """When the curated list covers every project (the normal case), the
+    LLM's curation wins — it carries NDA-safe client labels."""
+    data = {
+        "personal_information": {"full_name": "Test"},
+        "relevant_experience": [
+            {"client_label": "Leading Polish food producer", "description": "curated"},
+            {"client_label": "Global car dealer", "description": "curated"},
+        ],
+        "projects": [
+            {"name": "Real Client Name 1", "description": "raw"},
+            {"name": "Real Client Name 2", "description": "raw"},
+        ],
+    }
+    ctx = _prepare_full_cv_context(data)
+    labels = [i["client_label"] for i in ctx["relevant_experience"]]
+    assert labels == ["Leading Polish food producer", "Global car dealer"]
+
+
+def test_one_pager_stays_capped_despite_many_projects():
+    """The full-chronology rule applies to the Full CV ONLY — the one-pager
+    keeps its caps (user decision 2026-06-03)."""
+    data = {
+        "personal_information": {"full_name": "Test"},
+        "relevant_experience": [
+            {"client_label": f"Client {i}", "description": "x"} for i in range(25)
+        ],
+        "projects": [{"name": f"Project {i}", "description": "x"} for i in range(39)],
+    }
+    ctx = _prepare_context(data)
+    assert len(ctx["relevant_experience"]) <= 7

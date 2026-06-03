@@ -355,6 +355,30 @@ def _prepare_full_cv_context(data: dict) -> dict:
     personal = data.get("personal_information", {}) or {}
     full_name = personal.get("full_name") or "Candidate Profile"
 
+    # Relevant Experience: the Full CV shows the COMPLETE project chronology.
+    # The LLM-curated relevant_experience is capped (max 25) for the cascade,
+    # so consultants with long project lists (e.g. 39 stations) would lose
+    # their oldest projects here. When the raw projects list is longer than
+    # the curated one, derive the full list from projects instead — including
+    # the duration, which matters in a long chronology. The one-pager and the
+    # web UI are NOT affected (decision 2026-06-03: all projects belong in
+    # the Full CV, and only there).
+    relevant_experience = list(data.get("relevant_experience") or [])
+    projects_sorted = sorted(
+        [p for p in (data.get("projects") or []) if isinstance(p, dict)],
+        key=_score_project,
+        reverse=True,
+    )
+    if len(projects_sorted) > len(relevant_experience):
+        relevant_experience = [
+            {
+                "client_label": (p.get("name") or p.get("industry") or "Project").strip(),
+                "description": (p.get("description") or "").strip(),
+                "duration": (p.get("duration") or "").strip() or None,
+            }
+            for p in projects_sorted
+        ]
+
     personal_rows = []
     for key, label in _PERSONAL_ROW_ORDER:
         value = (personal.get(key) or "")
@@ -379,7 +403,7 @@ def _prepare_full_cv_context(data: dict) -> dict:
         "industries": list(data.get("industries") or []),
         "languages": languages,
         "professional_background": list(data.get("professional_background") or []),
-        "relevant_experience": list(data.get("relevant_experience") or []),
+        "relevant_experience": relevant_experience,
     }
 
 

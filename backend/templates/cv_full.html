@@ -266,7 +266,9 @@
     <ul class="exp-list">
         {% for item in relevant_experience %}
         <li class="exp-item">
-            <div class="client">{{ item.client_label }}</div>
+            {# duration is set when the full project chronology is rendered
+               (projects list longer than the curated relevant_experience) #}
+            <div class="client">{% if item.duration %}{{ item.duration }} — {% endif %}{{ item.client_label }}</div>
             {% if item.description %}
             <div class="desc">{{ item.description }}</div>
             {% endif %}

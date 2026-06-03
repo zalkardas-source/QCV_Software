@@ -1,15 +1,38 @@
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-.db
-.sqlite
+# Build context is the repo root for both images. Exclude everything that
+# shouldn't be baked into either container.
+
+# Secrets / local env
 .env
+
+# VCS / IDE
 .git/
+.gitignore
 .vscode/
 .idea/
-backend/data/
-frontend/node_modules/
-backend/__pycache__/
+
+# Python build artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# Local virtual envs / conda
 venv/
 .venv/
+.conda/
+
+# Local database & runtime data (mounted in via volume in docker-compose)
+backend/data/
+*.db
+*.sqlite
+
+# Frontend node_modules (not used today, but defensive)
+frontend/node_modules/
+
+# Tests + scratch are not needed inside the prod image
+tests/
+scratch/
+
+# Docs / dev files
+README.md
+.claude/

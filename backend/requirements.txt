@@ -6,9 +6,11 @@ pydantic
 pydantic-settings
 python-jose[cryptography]
 passlib[bcrypt]
-python-pptx
 docling
 openai
 python-dotenv
+msal
 requests
 beautifulsoup4
+weasyprint
+jinja2

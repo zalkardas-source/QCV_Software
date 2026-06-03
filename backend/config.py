@@ -25,5 +25,11 @@ class Settings(BaseSettings):
     database_url: str = "sqlite:///./backend/data/qcv_app.db"
     cors_allowed_origins: list[str] = ["http://localhost:8000"]
 
+    # Microsoft / Outlook OAuth (optional — only required if email inbox sync is used)
+    microsoft_client_id: str | None = None
+    microsoft_client_secret: str | None = None
+    microsoft_tenant_id: str = "common"
+    microsoft_redirect_uri: str = "http://localhost:8000/api/oauth/microsoft/callback"
+
 
 settings = Settings()

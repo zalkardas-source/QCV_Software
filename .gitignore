@@ -23,3 +23,16 @@ venv/
 
 # Local scratch/experiments (not part of the app)
 scratch/
+
+# Claude Code local settings
+.claude/
+
+# Docker build logs (created locally during compose build)
+build.log
+
+# Runtime data (uploaded photos, SQLite DB lives here too)
+backend/data/
+
+# Local backend logs
+backend_logs.txt
+*.log

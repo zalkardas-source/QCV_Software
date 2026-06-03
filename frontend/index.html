@@ -44,15 +44,40 @@
     <header class="bg-white border-b border-slate-200 shadow-sm z-10">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
             <div class="flex items-center gap-3">
-                <div class="w-10 h-10 bg-brand-blue rounded-lg flex items-center justify-center text-white font-bold text-xl">
-                    Q
-                </div>
-                <span class="font-bold text-xl text-slate-800 tracking-tight">Quatelio <span class="font-normal text-slate-500">CVision</span></span>
+                <img src="quatelio_logo.png" alt="Quatelio" class="h-9 w-auto" />
+                <span class="font-normal text-base text-slate-500 tracking-tight border-l border-slate-300 pl-3">CVision</span>
             </div>
             <div id="headerActions" class="hidden items-center gap-4">
                 <button id="navDashboardBtn" class="text-slate-600 hover:text-brand-blue font-medium transition-colors flex items-center gap-1.5"><i class="fa-solid fa-house text-xs"></i> Startseite</button>
                 <button id="navUploadBtn" class="text-slate-600 hover:text-brand-blue font-medium transition-colors flex items-center gap-1.5"><i class="fa-solid fa-file-arrow-up text-xs"></i> CV Parser</button>
                 <button id="navJobsBtn" class="text-slate-600 hover:text-brand-blue font-medium transition-colors flex items-center gap-1.5"><i class="fa-solid fa-briefcase text-xs"></i> Jobs</button>
+                <div class="relative">
+                    <button id="inboxStatusBtn" onclick="toggleInboxPanel()" class="text-slate-600 hover:text-brand-blue font-medium transition-colors flex items-center gap-1.5">
+                        <i class="fa-solid fa-inbox text-xs"></i> Inbox
+                        <span id="inboxStatusDot" class="w-2 h-2 rounded-full bg-slate-300"></span>
+                    </button>
+                    <div id="inboxPanel" class="hidden absolute right-0 mt-2 w-72 bg-white rounded-xl shadow-xl border border-slate-200 p-4 z-50">
+                        <div id="inboxNotConnected" class="hidden">
+                            <p class="text-sm text-slate-600 mb-3">Verbinde dein Outlook-Postfach, um eingehende Anfragen automatisch verarbeiten zu lassen.</p>
+                            <button onclick="connectOutlook()" class="w-full bg-[#0078d4] hover:bg-[#106ebe] text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2">
+                                <i class="fa-brands fa-microsoft"></i> Outlook verbinden
+                            </button>
+                            <p id="inboxNotConfigured" class="hidden mt-3 text-xs text-red-500">Backend ist nicht konfiguriert. <code>MICROSOFT_CLIENT_ID/SECRET</code> in <code>.env</code> setzen.</p>
+                        </div>
+                        <div id="inboxConnected" class="hidden">
+                            <div class="flex items-start gap-2 mb-3">
+                                <i class="fa-brands fa-microsoft text-[#0078d4] mt-0.5"></i>
+                                <div class="flex-1 min-w-0">
+                                    <div class="text-xs text-slate-400 uppercase font-semibold">Connected</div>
+                                    <div id="inboxConnectedEmail" class="text-sm font-medium text-slate-800 break-all"></div>
+                                </div>
+                            </div>
+                            <button onclick="disconnectOutlook()" class="w-full bg-slate-100 hover:bg-red-50 hover:text-red-600 text-slate-600 px-4 py-2 rounded-lg text-sm font-medium transition-colors">
+                                Trennen
+                            </button>
+                        </div>
+                    </div>
+                </div>
                 <div class="h-6 w-px bg-slate-200 mx-1"></div>
                 <button id="btnLogout" class="text-slate-400 hover:text-red-500 transition-colors flex items-center gap-1.5 font-medium" title="Logout">
                     <span class="text-xs hidden sm:inline">Logout</span>
@@ -70,7 +95,7 @@
             <div id="loginView" class="hidden flex flex-col items-center justify-center py-20 animate-fade-in">
                 <div class="glass-panel rounded-2xl p-8 w-full max-w-md shadow-xl border-t-4 border-brand-blue">
                     <div class="text-center mb-8">
-                        <div class="w-16 h-16 bg-brand-light rounded-2xl flex items-center justify-center text-brand-blue mx-auto mb-4 font-bold text-3xl">Q</div>
+                        <img src="quatelio_logo.png" alt="Quatelio" class="h-12 w-auto mx-auto mb-4" />
                         <h2 class="text-2xl font-bold text-slate-900">Sign in to CVision</h2>
                         <p class="text-slate-500">Professional Talent Analytics Platform</p>
                     </div>
@@ -178,8 +203,11 @@
                         <button id="btnSaveDB" class="bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 px-4 py-2 rounded-lg font-medium transition-colors shadow-sm flex items-center gap-2">
                             <i class="fa-solid fa-database"></i> Save to Database
                         </button>
-                        <button id="btnGeneratePPTX" class="bg-brand-blue hover:bg-brand-dark text-white px-4 py-2 rounded-lg font-medium transition-colors shadow-sm flex items-center gap-2">
-                            <i class="fa-solid fa-file-powerpoint"></i> Generate PPTX
+                        <button id="btnGeneratePDF" class="bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 px-4 py-2 rounded-lg font-medium transition-colors shadow-sm flex items-center gap-2">
+                            <i class="fa-solid fa-file-pdf"></i> One-Pager
+                        </button>
+                        <button id="btnGenerateFullCV" class="bg-brand-blue hover:bg-brand-dark text-white px-4 py-2 rounded-lg font-medium transition-colors shadow-sm flex items-center gap-2">
+                            <i class="fa-solid fa-file-lines"></i> Full CV
                         </button>
                     </div>
                 </div>
@@ -217,25 +245,42 @@
                             </div>
                         </div>
                         
-                        <!-- Summary -->
+                        <!-- Professional Focus -->
                         <div class="mt-8 pt-6 border-t border-slate-200">
-                            <h4 class="font-semibold text-slate-800 mb-3">Professional Summary</h4>
-                            <p id="previewSummary" class="text-sm text-slate-600 italic line-clamp-4 leading-relaxed">-</p>
+                            <h4 class="font-semibold text-slate-800 mb-3 uppercase text-xs tracking-widest text-brand-blue">Professional Focus</h4>
+                            <ul id="previewFocus" class="text-sm text-slate-700 space-y-1.5 list-disc pl-5"></ul>
                         </div>
-                        
+
+                        <!-- Personal Background -->
                         <div class="mt-8 pt-6 border-t border-slate-200">
-                            <h4 class="font-semibold text-slate-800 mb-3">Top Skills</h4>
-                            <div id="previewSkills" class="flex flex-wrap gap-2">
-                                <!-- Skills injected here -->
+                            <h4 class="font-semibold text-slate-800 mb-3 uppercase text-xs tracking-widest text-brand-blue">Personal Background</h4>
+
+                            <div class="mb-4">
+                                <div class="text-xs font-bold text-slate-700 mb-1.5">Education / Certificates</div>
+                                <ul id="previewEducation" class="text-sm text-slate-600 list-disc pl-5 space-y-1"></ul>
+                            </div>
+
+                            <div class="mb-4">
+                                <div class="text-xs font-bold text-slate-700 mb-1.5">Industries</div>
+                                <ul id="previewIndustries" class="text-sm text-slate-600 list-disc pl-5 space-y-1"></ul>
+                            </div>
+
+                            <div>
+                                <div class="text-xs font-bold text-slate-700 mb-1.5">Languages</div>
+                                <ul id="previewLanguages" class="text-sm text-slate-600 list-disc pl-5 space-y-1"></ul>
                             </div>
                         </div>
 
-                        <!-- Projects -->
+                        <!-- Professional Background (chronological) -->
                         <div class="mt-8 pt-6 border-t border-slate-200">
-                            <h4 class="font-semibold text-slate-800 mb-3">Key Projects</h4>
-                            <div id="previewProjects" class="space-y-4">
-                                <!-- Projects injected here -->
-                            </div>
+                            <h4 class="font-semibold text-slate-800 mb-3 uppercase text-xs tracking-widest text-brand-blue">Professional Background</h4>
+                            <div id="previewBackground" class="space-y-3 text-sm text-slate-700"></div>
+                        </div>
+
+                        <!-- Relevant Experience -->
+                        <div class="mt-8 pt-6 border-t border-slate-200">
+                            <h4 class="font-semibold text-slate-800 mb-3 uppercase text-xs tracking-widest text-brand-blue">Relevant Experience</h4>
+                            <div id="previewExperience" class="space-y-3 text-sm"></div>
                         </div>
                     </div>
                 </div>
@@ -308,7 +353,7 @@
                                 <th class="text-left px-3 py-3 font-semibold text-slate-600 text-xs">Kandidat</th>
                                 <th class="text-left px-3 py-3 font-semibold text-slate-600 text-xs">Email</th>
                                 <th class="text-left px-3 py-3 font-semibold text-slate-600 text-xs">Datei</th>
-                                <th class="text-left px-3 py-3 font-semibold text-slate-600 text-xs">Skills</th>
+                                <th class="text-left px-3 py-3 font-semibold text-slate-600 text-xs">Branchen</th>
                                 <th class="text-left px-3 py-3 font-semibold text-slate-600 text-xs">Status</th>
                                 <th class="text-left px-3 py-3 font-semibold text-slate-600 text-xs whitespace-nowrap">Datum</th>
                                 <th class="text-right px-3 py-3 font-semibold text-slate-600 text-xs">Aktionen</th>
@@ -428,14 +473,44 @@
                 </div>
             </div>
             <div class="overflow-y-auto flex-1 p-6">
-                <p id="candidateModalSummary" class="text-sm text-slate-600 italic mb-5"></p>
-                <div class="mb-5">
-                    <h3 class="font-semibold text-slate-800 mb-3">Skills</h3>
-                    <div id="candidateModalSkills" class="space-y-4"></div>
+                <p id="candidateModalRole" class="text-sm font-bold text-brand-blue uppercase tracking-wide mb-5"></p>
+
+                <div class="mb-6">
+                    <h3 class="font-bold text-brand-blue uppercase text-xs tracking-widest mb-3 pb-1 border-b border-brand-blue/30">Professional Focus</h3>
+                    <ul id="candidateModalFocus" class="text-sm text-slate-700 list-disc pl-5 space-y-1"></ul>
                 </div>
-                <div>
-                    <h3 class="font-semibold text-slate-800 mb-3">Erfahrung &amp; Projekte</h3>
-                    <div id="candidateModalProjects" class="space-y-3"></div>
+
+                <div class="mb-6">
+                    <h3 class="font-bold text-brand-blue uppercase text-xs tracking-widest mb-3 pb-1 border-b border-brand-blue/30">Personal Background</h3>
+                    <div class="mb-3">
+                        <div class="text-xs font-bold text-slate-700 mb-1">Education / Certificates</div>
+                        <ul id="candidateModalEducation" class="text-sm text-slate-600 list-disc pl-5 space-y-1"></ul>
+                    </div>
+                    <div class="mb-3">
+                        <div class="text-xs font-bold text-slate-700 mb-1">Industries</div>
+                        <ul id="candidateModalIndustries" class="text-sm text-slate-600 list-disc pl-5 space-y-1"></ul>
+                    </div>
+                    <div>
+                        <div class="text-xs font-bold text-slate-700 mb-1">Languages</div>
+                        <ul id="candidateModalLanguages" class="text-sm text-slate-600 list-disc pl-5 space-y-1"></ul>
+                    </div>
+                </div>
+
+                <div class="mb-6">
+                    <h3 class="font-bold text-brand-blue uppercase text-xs tracking-widest mb-3 pb-1 border-b border-brand-blue/30">Professional Background</h3>
+                    <div id="candidateModalBackground" class="space-y-3 text-sm text-slate-700"></div>
+                </div>
+
+                <div class="mb-6">
+                    <h3 class="font-bold text-brand-blue uppercase text-xs tracking-widest mb-3 pb-1 border-b border-brand-blue/30">Relevant Experience</h3>
+                    <div id="candidateModalExperience" class="space-y-3 text-sm"></div>
+                </div>
+
+                <div id="candidateModalVersionsWrap" class="hidden mt-6 pt-6 border-t border-slate-200">
+                    <h3 class="font-semibold text-slate-800 mb-3">
+                        Versionen <span id="candidateModalVersionsCount" class="text-xs font-normal text-slate-500"></span>
+                    </h3>
+                    <div id="candidateModalVersions" class="space-y-2"></div>
                 </div>
             </div>
         </div>
@@ -504,6 +579,6 @@
         </div>
     </div>
 
-    <script src="app.js?v=15"></script>
+    <script src="app.js?v=17-fullcv"></script>
 </body>
 </html>
